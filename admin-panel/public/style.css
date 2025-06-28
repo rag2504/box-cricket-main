@@ -1,0 +1,17 @@
+body { font-family: Arial, sans-serif; margin: 0; background: #f4f4f4; }
+#login-section { max-width: 300px; margin: 80px auto; background: #fff; padding: 2em; border-radius: 8px; box-shadow: 0 2px 8px #0001; }
+#login-section h2 { text-align: center; }
+#login-form input { width: 100%; margin: 0.5em 0; padding: 0.5em; }
+#login-form button { width: 100%; padding: 0.7em; background: #22c55e; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+.sidebar { width: 180px; background: #222; color: #fff; height: 100vh; position: fixed; top: 0; left: 0; padding: 1em 0; }
+.sidebar h2 { text-align: center; margin-bottom: 1em; }
+.sidebar ul { list-style: none; padding: 0; }
+.sidebar li { padding: 1em; cursor: pointer; }
+.sidebar li:hover, .sidebar li.active { background: #22c55e; }
+.main-content { margin-left: 200px; padding: 2em; }
+.section { background: #fff; padding: 1.5em; border-radius: 8px; box-shadow: 0 2px 8px #0001; }
+table { width: 100%; border-collapse: collapse; margin: 1em 0; }
+td, th { border: 1px solid #ddd; padding: 0.5em; text-align: left; }
+th { background: #f0f0f0; }
+form input, form select, form button { margin: 0.3em 0; padding: 0.5em; }
+form button { background: #22c55e; color: #fff; border: none; border-radius: 4px; cursor: pointer; } 

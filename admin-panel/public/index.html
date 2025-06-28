@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BoxCric Admin Panel</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="login-section">
+    <h2>Admin Login</h2>
+    <form id="login-form">
+      <input type="email" id="admin-email" placeholder="Email" required><br>
+      <input type="password" id="admin-password" placeholder="Password" required><br>
+      <button type="submit">Login</button>
+      <div id="login-error" style="color:red;"></div>
+    </form>
+  </div>
+  <div id="admin-panel" style="display:none;">
+    <div class="sidebar">
+      <h2>Admin</h2>
+      <ul>
+        <li data-section="dashboard">Dashboard</li>
+        <li data-section="users">Users</li>
+        <li data-section="grounds">Grounds</li>
+        <li data-section="locations">Locations</li>
+        <li data-section="payments">Payments</li>
+        <li id="logout-btn">Logout</li>
+      </ul>
+    </div>
+    <div class="main-content">
+      <div id="dashboard-section" class="section"></div>
+      <div id="users-section" class="section" style="display:none;"></div>
+      <div id="grounds-section" class="section" style="display:none;"></div>
+      <div id="locations-section" class="section" style="display:none;"></div>
+      <div id="payments-section" class="section" style="display:none;"></div>
+    </div>
+  </div>
+  <script src="admin.js"></script>
+</body>
+</html> 
