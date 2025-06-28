@@ -7,7 +7,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { paymentsApi } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -16,13 +15,8 @@ import { toast } from "sonner";
 interface Booking {
   id: string;
   bookingId: string;
-  groundId: {
-    name: string;
-    location: {
-      address: string;
-    };
-    images: string[];
-  };
+  groundId?: any;
+  ground?: any;
   bookingDate: string;
   timeSlot: {
     startTime: string;
@@ -37,12 +31,14 @@ interface Booking {
       phone: string;
     };
   };
-  pricing: {
-    baseAmount: number;
-    discount: number;
-    taxes: number;
-    totalAmount: number;
+  pricing?: {
+    baseAmount?: number;
+    discount?: number;
+    taxes?: number;
+    totalAmount?: number;
+    duration?: number;
   };
+  amount?: number;
 }
 
 interface PaymentModalProps {
@@ -69,7 +65,6 @@ const PaymentModal = ({
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
 
   useEffect(() => {
-    // Load Razorpay script
     if (!window.Razorpay) {
       const script = document.createElement("script");
       script.src = "https://checkout.razorpay.com/v1/checkout.js";
@@ -89,7 +84,7 @@ const PaymentModal = ({
     try {
       setIsProcessing(true);
 
-      // Create order
+      // Create order on backend
       const orderResponse = await paymentsApi.createOrder({
         bookingId: booking.id,
       });
@@ -98,16 +93,24 @@ const PaymentModal = ({
         throw new Error(orderResponse.message || "Failed to create order");
       }
 
-      const { order } = orderResponse;
+      const { order, key } = orderResponse; // <-- key is returned from backend
 
-      // Configure Razorpay options
+      if (!key) {
+        throw new Error("Razorpay key missing from server response.");
+      }
+
+      const ground =
+        (booking.groundId && typeof booking.groundId === "object"
+          ? booking.groundId
+          : booking.ground) || {};
+
       const options = {
-        key: order.key,
+        key, // <-- CRITICALLY IMPORTANT: use backend-provided key
         amount: order.amount,
         currency: order.currency,
         name: "BoxCric",
-        description: `Booking for ${booking.groundId.name}`,
-        image: "/placeholder.svg", // Add your logo here
+        description: `Booking for ${ground?.name || "Ground"}`,
+        image: "/placeholder.svg",
         order_id: order.id,
         prefill: {
           name: user.name,
@@ -116,10 +119,10 @@ const PaymentModal = ({
         },
         notes: {
           booking_id: booking.bookingId,
-          ground_name: booking.groundId.name,
+          ground_name: ground?.name || "",
         },
         theme: {
-          color: "#22c55e", // Cricket green color
+          color: "#22c55e",
         },
         modal: {
           ondismiss: () => {
@@ -129,7 +132,6 @@ const PaymentModal = ({
         },
         handler: async (response: any) => {
           try {
-            // Verify payment on backend
             const verifyResponse = await paymentsApi.verifyPayment({
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
@@ -149,9 +151,7 @@ const PaymentModal = ({
           } catch (error: any) {
             console.error("Payment verification error:", error);
             toast.error(error.message || "Payment verification failed");
-
-            // Record payment failure
-            await paymentsApi.paymentFailed({
+            await paymentsApi.paymentFailed?.({
               bookingId: booking.id,
               razorpay_order_id: response.razorpay_order_id,
               error: error.message,
@@ -162,7 +162,6 @@ const PaymentModal = ({
         },
       };
 
-      // Open Razorpay checkout
       const rzp = new window.Razorpay(options);
       rzp.open();
     } catch (error: any) {
@@ -173,6 +172,44 @@ const PaymentModal = ({
   };
 
   if (!booking) return null;
+
+  const ground =
+    (booking.groundId && typeof booking.groundId === "object"
+      ? booking.groundId
+      : booking.ground) || {};
+
+  let firstImage = "/placeholder.svg";
+  if (
+    ground.images &&
+    Array.isArray(ground.images) &&
+    ground.images.length > 0
+  ) {
+    const imgItem = ground.images[0];
+    if (typeof imgItem === "string") {
+      firstImage = imgItem;
+    } else if (imgItem && typeof imgItem === "object" && "url" in imgItem) {
+      firstImage = imgItem.url || "/placeholder.svg";
+    }
+  }
+
+  const address =
+    ground?.location?.address ||
+    (ground?.location ? ground.location : "") ||
+    "No address available";
+
+  // Defensive pricing fallback
+  const pricing = booking?.pricing || {
+    baseAmount: booking?.amount || 0,
+    discount: 0,
+    taxes: 0,
+    totalAmount: booking?.amount || 0,
+    duration: booking?.timeSlot?.duration || 1,
+  };
+  const baseAmount = pricing.baseAmount ?? 0;
+  const discount = pricing.discount ?? 0;
+  const taxes = pricing.taxes ?? 0;
+  const totalAmount = pricing.totalAmount ?? 0;
+  const duration = pricing.duration ?? 1;
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-IN", {
@@ -185,7 +222,10 @@ const PaymentModal = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent aria-describedby="payment-desc" className="sm:max-w-lg">
+        <div id="payment-desc" style={{display: 'none'}}>
+          Complete your payment securely via Razorpay.
+        </div>
         <DialogHeader>
           <DialogTitle className="flex items-center space-x-2">
             <CreditCard className="w-5 h-5 text-cricket-green" />
@@ -198,17 +238,17 @@ const PaymentModal = ({
           <div className="space-y-4">
             <div className="flex items-start space-x-3">
               <img
-                src={booking.groundId.images[0] || "/placeholder.svg"}
-                alt={booking.groundId.name}
+                src={firstImage}
+                alt={ground?.name || "Ground"}
                 className="w-16 h-16 rounded-lg object-cover"
               />
               <div className="flex-1">
                 <h3 className="font-semibold text-lg">
-                  {booking.groundId.name}
+                  {ground?.name || "Ground"}
                 </h3>
                 <div className="flex items-center space-x-1 text-sm text-gray-600">
                   <MapPin className="w-4 h-4" />
-                  <span>{booking.groundId.location.address}</span>
+                  <span>{address}</span>
                 </div>
               </div>
             </div>
@@ -223,24 +263,26 @@ const PaymentModal = ({
               <div>
                 <span className="text-gray-600">Time:</span>
                 <div className="font-medium">
-                  {booking.timeSlot.startTime} - {booking.timeSlot.endTime}
+                  {booking.timeSlot?.startTime
+                    ? booking.timeSlot.startTime + " - " + booking.timeSlot.endTime
+                    : "-"}
                 </div>
               </div>
               <div>
                 <span className="text-gray-600">Duration:</span>
                 <div className="font-medium">
-                  {booking.timeSlot.duration} hours
+                  {booking.timeSlot?.duration || duration || "-"} hours
                 </div>
               </div>
               <div>
                 <span className="text-gray-600">Players:</span>
                 <div className="font-medium">
-                  {booking.playerDetails.playerCount}
+                  {booking.playerDetails?.playerCount}
                 </div>
               </div>
             </div>
 
-            {booking.playerDetails.teamName && (
+            {booking.playerDetails?.teamName && (
               <div>
                 <span className="text-gray-600 text-sm">Team:</span>
                 <div className="font-medium">
@@ -252,8 +294,8 @@ const PaymentModal = ({
             <div>
               <span className="text-gray-600 text-sm">Contact Person:</span>
               <div className="font-medium">
-                {booking.playerDetails.contactPerson.name} -{" "}
-                {booking.playerDetails.contactPerson.phone}
+                {booking.playerDetails?.contactPerson?.name} -{" "}
+                {booking.playerDetails?.contactPerson?.phone}
               </div>
             </div>
           </div>
@@ -267,19 +309,19 @@ const PaymentModal = ({
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span>Base Amount</span>
-                <span>₹{booking.pricing.baseAmount}</span>
+                <span>₹{baseAmount}</span>
               </div>
 
-              {booking.pricing.discount > 0 && (
+              {discount > 0 && (
                 <div className="flex justify-between text-green-600">
                   <span>Discount</span>
-                  <span>-₹{booking.pricing.discount}</span>
+                  <span>-₹{discount}</span>
                 </div>
               )}
 
               <div className="flex justify-between">
                 <span>GST (18%)</span>
-                <span>₹{booking.pricing.taxes}</span>
+                <span>₹{taxes}</span>
               </div>
 
               <Separator />
@@ -287,7 +329,7 @@ const PaymentModal = ({
               <div className="flex justify-between font-semibold text-lg">
                 <span>Total Amount</span>
                 <span className="text-cricket-green">
-                  ₹{booking.pricing.totalAmount}
+                  ₹{totalAmount}
                 </span>
               </div>
             </div>
@@ -324,7 +366,7 @@ const PaymentModal = ({
               ) : (
                 <div className="flex items-center space-x-2">
                   <CreditCard className="w-5 h-5" />
-                  <span>Pay ₹{booking.pricing.totalAmount}</span>
+                  <span>Pay ₹{totalAmount}</span>
                 </div>
               )}
             </Button>

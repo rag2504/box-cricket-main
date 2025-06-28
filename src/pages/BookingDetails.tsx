@@ -11,6 +11,7 @@ import {
   Star,
   Shield,
   CreditCard,
+  User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,7 +36,6 @@ const BookingDetails = () => {
       navigate("/");
       return;
     }
-
     if (id) {
       fetchBookingDetails();
     }
@@ -59,13 +59,11 @@ const BookingDetails = () => {
 
   const handleCancelBooking = async () => {
     if (!booking) return;
-
     try {
       const response = await bookingsApi.updateBookingStatus(booking._id, {
         status: "cancelled",
         reason: "User cancellation",
       });
-
       if (response.success) {
         toast.success("Booking cancelled successfully");
         setBooking((prev: any) => ({ ...prev, status: "cancelled" }));
@@ -91,6 +89,7 @@ const BookingDetails = () => {
   };
 
   const formatDate = (dateString: string) => {
+    if (!dateString) return "";
     return new Date(dateString).toLocaleDateString("en-IN", {
       weekday: "long",
       year: "numeric",
@@ -98,6 +97,30 @@ const BookingDetails = () => {
       day: "numeric",
     });
   };
+
+  // Defensive helpers for deeply nested fields
+  const ground =
+    booking?.groundId && typeof booking.groundId === "object"
+      ? booking.groundId
+      : booking?.ground || {};
+
+  const playerDetails = booking?.playerDetails || {};
+  const contactPerson = playerDetails.contactPerson || {};
+
+  // Defensive for pricing and payment
+  const pricing = booking?.pricing || {};
+  const payment = booking?.payment || { status: "pending" };
+
+  // Auto-open payment modal if payment is pending
+  useEffect(() => {
+    if (
+      booking &&
+      (payment.status === "pending" || (!payment && booking.status === "pending"))
+    ) {
+      setIsPaymentModalOpen(true);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [booking]);
 
   if (isLoading) {
     return (
@@ -148,7 +171,9 @@ const BookingDetails = () => {
           </Button>
 
           <Badge className={getStatusColor(booking.status)} variant="secondary">
-            {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+            {booking.status
+              ? booking.status.charAt(0).toUpperCase() + booking.status.slice(1)
+              : ""}
           </Badge>
         </div>
 
@@ -167,17 +192,17 @@ const BookingDetails = () => {
                 <div className="flex items-start justify-between">
                   <div>
                     <h2 className="text-xl font-semibold">
-                      {booking.groundId.name}
+                      {ground?.name || "Unknown Ground"}
                     </h2>
                     <div className="flex items-center space-x-1 text-gray-600 mt-1">
                       <MapPin className="w-4 h-4" />
-                      <span>{booking.groundId.location.address}</span>
+                      <span>{ground?.location?.address || ""}</span>
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="text-sm text-gray-600">Booking ID</div>
                     <div className="font-mono font-semibold">
-                      {booking.bookingId}
+                      {booking.bookingId || booking._id}
                     </div>
                   </div>
                 </div>
@@ -200,8 +225,11 @@ const BookingDetails = () => {
                     <div>
                       <div className="text-sm text-gray-600">Time</div>
                       <div className="font-medium">
-                        {booking.timeSlot.startTime} -{" "}
-                        {booking.timeSlot.endTime}
+                        {booking.timeSlot?.startTime
+                          ? booking.timeSlot.startTime +
+                            " - " +
+                            booking.timeSlot.endTime
+                          : booking.timeSlot || ""}
                       </div>
                     </div>
                   </div>
@@ -211,17 +239,17 @@ const BookingDetails = () => {
                     <div>
                       <div className="text-sm text-gray-600">Players</div>
                       <div className="font-medium">
-                        {booking.playerDetails.playerCount}
+                        {playerDetails?.playerCount || ""}
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {booking.playerDetails.teamName && (
+                {playerDetails?.teamName && (
                   <div>
                     <div className="text-sm text-gray-600">Team Name</div>
                     <div className="font-medium">
-                      {booking.playerDetails.teamName}
+                      {playerDetails.teamName}
                     </div>
                   </div>
                 )}
@@ -238,17 +266,17 @@ const BookingDetails = () => {
                   <div className="flex items-center space-x-3">
                     <User className="w-5 h-5 text-gray-500" />
                     <span className="font-medium">
-                      {booking.playerDetails.contactPerson.name}
+                      {contactPerson?.name || ""}
                     </span>
                   </div>
                   <div className="flex items-center space-x-3">
                     <Phone className="w-5 h-5 text-gray-500" />
-                    <span>{booking.playerDetails.contactPerson.phone}</span>
+                    <span>{contactPerson?.phone || ""}</span>
                   </div>
-                  {booking.playerDetails.contactPerson.email && (
+                  {contactPerson?.email && (
                     <div className="flex items-center space-x-3">
                       <Mail className="w-5 h-5 text-gray-500" />
-                      <span>{booking.playerDetails.contactPerson.email}</span>
+                      <span>{contactPerson.email}</span>
                     </div>
                   )}
                 </div>
@@ -263,32 +291,35 @@ const BookingDetails = () => {
               <CardContent>
                 <div className="flex items-start space-x-4">
                   <img
-                    src={booking.groundId.images[0] || "/placeholder.svg"}
-                    alt={booking.groundId.name}
+                    src={
+                      ground?.images && ground.images.length > 0
+                        ? ground.images[0].url
+                        : "/placeholder.svg"
+                    }
+                    alt={ground?.name || "Ground"}
                     className="w-24 h-24 rounded-lg object-cover"
                   />
                   <div className="flex-1">
                     <div className="flex items-center space-x-2 mb-2">
                       <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
                       <span className="font-medium">
-                        {booking.groundId.rating?.average || "N/A"}
+                        {ground?.rating?.average || "N/A"}
                       </span>
                       <span className="text-sm text-gray-600">
-                        ({booking.groundId.rating?.count || 0} reviews)
+                        ({ground?.rating?.count || 0} reviews)
                       </span>
                     </div>
                     <div className="space-y-1 text-sm text-gray-600">
                       <div>
-                        Pitch: {booking.groundId.features?.pitchType || "N/A"}
+                        Pitch: {ground?.features?.pitchType || "N/A"}
                       </div>
                       <div>
-                        Capacity: {booking.groundId.features?.capacity || "N/A"}{" "}
-                        players
+                        Capacity: {ground?.features?.capacity || "N/A"} players
                       </div>
-                      {booking.groundId.features?.lighting && (
+                      {ground?.features?.lighting && (
                         <div>✅ Night lighting available</div>
                       )}
-                      {booking.groundId.features?.parking && (
+                      {ground?.features?.parking && (
                         <div>✅ Parking available</div>
                       )}
                     </div>
@@ -311,23 +342,23 @@ const BookingDetails = () => {
               <CardContent className="space-y-3">
                 <div className="flex justify-between text-sm">
                   <span>Base Amount</span>
-                  <span>₹{booking.pricing.baseAmount}</span>
+                  <span>₹{pricing.baseAmount || booking.amount || ""}</span>
                 </div>
-                {booking.pricing.discount > 0 && (
+                {pricing.discount > 0 && (
                   <div className="flex justify-between text-sm text-green-600">
                     <span>Discount</span>
-                    <span>-₹{booking.pricing.discount}</span>
+                    <span>-₹{pricing.discount}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-sm">
                   <span>GST (18%)</span>
-                  <span>₹{booking.pricing.taxes}</span>
+                  <span>₹{pricing.taxes || 0}</span>
                 </div>
                 <Separator />
                 <div className="flex justify-between font-semibold">
                   <span>Total Amount</span>
                   <span className="text-cricket-green">
-                    ₹{booking.pricing.totalAmount}
+                    ₹{pricing.totalAmount || booking.amount || ""}
                   </span>
                 </div>
 
@@ -337,15 +368,17 @@ const BookingDetails = () => {
                   </div>
                   <Badge
                     className={
-                      booking.payment.status === "completed"
+                      payment.status === "completed"
                         ? "bg-green-100 text-green-800"
-                        : booking.payment.status === "pending"
-                          ? "bg-yellow-100 text-yellow-800"
-                          : "bg-red-100 text-red-800"
+                        : payment.status === "pending"
+                        ? "bg-yellow-100 text-yellow-800"
+                        : "bg-red-100 text-red-800"
                     }
                   >
-                    {booking.payment.status.charAt(0).toUpperCase() +
-                      booking.payment.status.slice(1)}
+                    {payment.status
+                      ? payment.status.charAt(0).toUpperCase() +
+                        payment.status.slice(1)
+                      : "Pending"}
                   </Badge>
                 </div>
               </CardContent>
@@ -356,7 +389,7 @@ const BookingDetails = () => {
               <CardContent className="pt-6">
                 <div className="space-y-3">
                   {booking.status === "pending" &&
-                    booking.payment.status === "pending" && (
+                    payment.status === "pending" && (
                       <Button
                         onClick={() => setIsPaymentModalOpen(true)}
                         className="w-full bg-cricket-green hover:bg-cricket-green/90"
@@ -384,7 +417,7 @@ const BookingDetails = () => {
 
                   <Button
                     variant="outline"
-                    onClick={() => navigate(`/ground/${booking.groundId._id}`)}
+                    onClick={() => navigate(`/ground/${ground?._id || ""}`)}
                     className="w-full"
                   >
                     View Ground Details

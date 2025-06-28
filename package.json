@@ -90,7 +90,7 @@
     "nodemon": "^3.0.2",
     "postcss": "^8.4.47",
     "prettier": "^3.5.3",
-    "razorpay": "^2.9.2",
+    "razorpay": "^2.9.6",
     "socket.io": "^4.7.4",
     "tailwindcss": "^3.4.11",
     "typescript": "^5.5.3",
