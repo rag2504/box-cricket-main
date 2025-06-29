@@ -13,8 +13,7 @@ const bookingSchema = new mongoose.Schema(
       required: true,
     },
     groundId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Ground",
+      type: mongoose.Schema.Types.Mixed, // Allow both ObjectId and String
       required: true,
     },
     bookingDate: {

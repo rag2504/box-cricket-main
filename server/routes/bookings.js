@@ -1,8 +1,10 @@
 import express from "express";
 import { fallbackGrounds } from "../data/fallbackGrounds.js";
+import { authMiddleware } from "../middleware/auth.js";
+import Booking from "../models/Booking.js";
+import Ground from "../models/Ground.js";
 
 const router = express.Router();
-export const demoBookings = [];
 
 // Utility to calculate pricing
 function getPricing(ground, timeSlot) {
@@ -24,8 +26,308 @@ function getPricing(ground, timeSlot) {
   };
 }
 
-// Create a booking
-router.post("/", (req, res) => {
+// Create a booking (authenticated)
+router.post("/", authMiddleware, async (req, res) => {
+  try {
+    const { groundId, bookingDate, timeSlot, playerDetails, requirements } = req.body;
+    const userId = req.userId;
+
+    // Validate required fields
+    if (!groundId || !bookingDate || !timeSlot || !playerDetails) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Missing required fields" 
+      });
+    }
+
+    // Check if ground exists - handle both MongoDB and fallback grounds
+    let ground = null;
+    const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(groundId);
+    
+    if (isValidObjectId) {
+      // Try to find in MongoDB
+      ground = await Ground.findById(groundId);
+    }
+    
+    // If not found in MongoDB, check fallback data
+    if (!ground) {
+      ground = fallbackGrounds.find(g => g._id === groundId);
+    }
+    
+    if (!ground) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Ground not found" 
+      });
+    }
+
+    // Parse time slot (format: "10:00-12:00")
+    const [startTime, endTime] = timeSlot.split("-");
+    const start = new Date(`2000-01-01 ${startTime}`);
+    const end = new Date(`2000-01-01 ${endTime}`);
+    const duration = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+
+    // Check if slot is already booked (only for MongoDB grounds)
+    if (isValidObjectId) {
+      const existingBooking = await Booking.findOne({
+        groundId,
+        bookingDate: new Date(bookingDate),
+        "timeSlot.startTime": startTime,
+        "timeSlot.endTime": endTime,
+        status: { $in: ["pending", "confirmed"] }
+      });
+
+      if (existingBooking) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Slot already booked" 
+        });
+      }
+    }
+
+    // Calculate pricing
+    const baseAmount = ground.price?.perHour ? ground.price.perHour * duration : 500;
+    const discount = ground.price?.discount || 0;
+    const discountedAmount = baseAmount - discount;
+    const taxes = Math.round(discountedAmount * 0.18); // 18% GST
+    const totalAmount = discountedAmount + taxes;
+
+    // Generate unique booking ID
+    const timestamp = Date.now().toString(36);
+    const random = Math.random().toString(36).substr(2, 5);
+    const bookingId = `BC${timestamp}${random}`.toUpperCase();
+
+    // Create booking
+    const booking = new Booking({
+      bookingId,
+      userId,
+      groundId,
+      bookingDate: new Date(bookingDate),
+      timeSlot: {
+        startTime,
+        endTime,
+        duration
+      },
+      playerDetails: {
+        teamName: playerDetails.teamName,
+        playerCount: playerDetails.playerCount,
+        contactPerson: playerDetails.contactPerson,
+        requirements
+      },
+      pricing: {
+        baseAmount,
+        discount,
+        taxes,
+        totalAmount,
+        currency: "INR"
+      },
+      status: "pending"
+    });
+
+    await booking.save();
+
+    // Populate ground details if it's a MongoDB ground
+    if (isValidObjectId) {
+      await booking.populate("groundId", "name location price features");
+    } else {
+      // For fallback grounds, manually add ground details
+      booking.groundId = ground;
+    }
+
+    res.json({ 
+      success: true, 
+      booking: booking.toObject() 
+    });
+
+  } catch (error) {
+    console.error("Error creating booking:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to create booking" 
+    });
+  }
+});
+
+// Get user's bookings (authenticated)
+router.get("/my-bookings", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { status, page = 1, limit = 10 } = req.query;
+
+    const query = { userId };
+    if (status) {
+      query.status = status;
+    }
+
+    const bookings = await Booking.find(query)
+      .sort({ createdAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
+
+    // Process bookings to handle both MongoDB and fallback grounds
+    const processedBookings = await Promise.all(
+      bookings.map(async (booking) => {
+        const bookingObj = booking.toObject();
+        
+        // Check if groundId is a valid ObjectId
+        const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(bookingObj.groundId);
+        
+        if (isValidObjectId) {
+          // Populate from MongoDB
+          await booking.populate("groundId", "name location price features");
+          bookingObj.groundId = booking.groundId;
+        } else {
+          // Find in fallback data
+          const fallbackGround = fallbackGrounds.find(g => g._id === bookingObj.groundId);
+          if (fallbackGround) {
+            bookingObj.groundId = fallbackGround;
+          }
+        }
+        
+        return bookingObj;
+      })
+    );
+
+    const total = await Booking.countDocuments(query);
+
+    res.json({
+      success: true,
+      bookings: processedBookings,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    });
+
+  } catch (error) {
+    console.error("Error fetching user bookings:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to fetch bookings" 
+    });
+  }
+});
+
+// Get booking details by ID (authenticated)
+router.get("/:id", authMiddleware, async (req, res) => {
+  try {
+    const bookingId = req.params.id;
+    const userId = req.userId;
+    if (!bookingId || bookingId === "undefined") {
+      return res.status(400).json({ success: false, message: "Invalid booking ID" });
+    }
+    const booking = await Booking.findOne({ _id: bookingId, userId });
+
+    if (!booking) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Booking not found" 
+      });
+    }
+
+    const bookingObj = booking.toObject();
+    
+    // Check if groundId is a valid ObjectId
+    const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(bookingObj.groundId);
+    
+    if (isValidObjectId) {
+      // Populate from MongoDB
+      await booking.populate("groundId", "name location price features");
+      bookingObj.groundId = booking.groundId;
+    } else {
+      // Find in fallback data
+      const fallbackGround = fallbackGrounds.find(g => g._id === bookingObj.groundId);
+      if (fallbackGround) {
+        bookingObj.groundId = fallbackGround;
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      booking: bookingObj 
+    });
+
+  } catch (error) {
+    console.error("Error fetching booking:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to fetch booking" 
+    });
+  }
+});
+
+// Update booking status (authenticated)
+router.patch("/:id/status", authMiddleware, async (req, res) => {
+  try {
+    const bookingId = req.params.id;
+    const userId = req.userId;
+    if (!bookingId || bookingId === "undefined") {
+      return res.status(400).json({ success: false, message: "Invalid booking ID" });
+    }
+    const { status, reason } = req.body;
+
+    const booking = await Booking.findOne({ _id: bookingId, userId });
+
+    if (!booking) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Booking not found" 
+      });
+    }
+
+    booking.status = status;
+    if (reason) {
+      booking.cancellationReason = reason;
+    }
+
+    await booking.save();
+
+    res.json({ 
+      success: true, 
+      booking: booking.toObject() 
+    });
+
+  } catch (error) {
+    console.error("Error updating booking status:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to update booking status" 
+    });
+  }
+});
+
+// Get bookings for a ground and date (for availability check)
+router.get("/ground/:groundId/:date", async (req, res) => {
+  try {
+    const { groundId, date } = req.params;
+
+    const bookings = await Booking.find({
+      groundId,
+      bookingDate: date,
+      status: { $in: ["pending", "confirmed"] }
+    }).select("timeSlot status");
+
+    res.json({ 
+      success: true, 
+      bookings: bookings.map(booking => booking.toObject()) 
+    });
+
+  } catch (error) {
+    console.error("Error fetching ground bookings:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to fetch ground bookings" 
+    });
+  }
+});
+
+// Demo routes for backward compatibility
+export const demoBookings = [];
+
+// Create a booking (demo - for backward compatibility)
+router.post("/demo", (req, res) => {
   const { groundId, bookingDate, timeSlot, playerDetails, requirements } = req.body;
   const ground = fallbackGrounds.find((g) => g._id === groundId);
   if (!ground) {
@@ -78,19 +380,10 @@ router.post("/", (req, res) => {
   res.json({ success: true, booking: { ...booking, id: booking._id, ground: safeGround } });
 });
 
-// Get bookings for a ground and date
-router.get("/ground/:groundId/:date", (req, res) => {
-  const { groundId, date } = req.params;
-  const bookings = demoBookings
-    .filter((b) => b.groundId === groundId && b.bookingDate === date)
-    .map((booking) => ({ ...booking, id: booking._id })); // ensure id field
-  res.json({ success: true, bookings });
-});
-
-// Get booking details by ID (demo)
-router.get("/:id", (req, res) => {
+// Get booking details by ID (demo - for backward compatibility)
+router.get("/demo/:id", (req, res) => {
   const booking = demoBookings.find((b) => b._id === req.params.id);
-  if (!booking) {
+    if (!booking) {
     return res.status(404).json({ success: false, message: "Booking not found" });
   }
   const ground = fallbackGrounds.find((g) => g._id === booking.groundId) || {};

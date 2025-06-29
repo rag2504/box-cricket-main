@@ -7,35 +7,195 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="login-section">
-    <h2>Admin Login</h2>
-    <form id="login-form">
-      <input type="email" id="admin-email" placeholder="Email" required><br>
-      <input type="password" id="admin-password" placeholder="Password" required><br>
-      <button type="submit">Login</button>
-      <div id="login-error" style="color:red;"></div>
-    </form>
+  <div class="container">
+    <header>
+      <h1>BoxCric Admin Panel</h1>
+      <div id="loginSection">
+        <form id="loginForm">
+          <input type="email" id="email" placeholder="Email" required>
+          <input type="password" id="password" placeholder="Password" required>
+          <button type="submit">Login</button>
+        </form>
+      </div>
+      <div id="userSection" style="display: none;">
+        <span id="userEmail"></span>
+        <button onclick="logout()">Logout</button>
+      </div>
+    </header>
+
+    <main id="mainContent" style="display: none;">
+      <nav>
+        <button onclick="showSection('grounds')" class="nav-btn active">Grounds</button>
+        <button onclick="showSection('locations')" class="nav-btn">Locations</button>
+      </nav>
+
+      <!-- Grounds Section -->
+      <section id="groundsSection">
+        <div class="section-header">
+          <h2>Manage Grounds</h2>
+          <button onclick="showAddGroundForm()" class="btn-primary">Add New Ground</button>
+        </div>
+
+        <!-- Add Ground Form -->
+        <div id="addGroundForm" style="display: none;" class="form-container">
+          <h3>Add New Ground</h3>
+          <form id="groundForm">
+            <!-- Basic Information -->
+            <div class="form-group">
+              <h4>Basic Information</h4>
+              <input type="text" id="groundName" placeholder="Ground Name" required>
+              <textarea id="groundDescription" placeholder="Description" required></textarea>
+            </div>
+
+            <!-- Location -->
+            <div class="form-group">
+              <h4>Location</h4>
+              <select id="groundCity" required>
+                <option value="">Select City</option>
+              </select>
+              <input type="text" id="groundAddress" placeholder="Address" required>
+              <input type="text" id="groundPincode" placeholder="Pincode" required>
+            </div>
+
+            <!-- Pricing -->
+            <div class="form-group">
+              <h4>Pricing</h4>
+              <input type="number" id="groundPrice" placeholder="Price per Hour (INR)" required>
+              <input type="number" id="groundDiscount" placeholder="Discount (%)" value="0">
+            </div>
+
+            <!-- Images -->
+            <div class="form-group">
+              <h4>Images</h4>
+              <input type="url" id="groundImage1" placeholder="Primary Image URL">
+              <input type="url" id="groundImage2" placeholder="Secondary Image URL">
+              <input type="url" id="groundImage3" placeholder="Additional Image URL">
+            </div>
+
+            <!-- Features -->
+            <div class="form-group">
+              <h4>Features</h4>
+              <select id="groundPitchType" required>
+                <option value="">Select Pitch Type</option>
+                <option value="Artificial Turf">Artificial Turf</option>
+                <option value="Synthetic">Synthetic</option>
+                <option value="Matting">Matting</option>
+                <option value="Concrete">Concrete</option>
+              </select>
+              <input type="number" id="groundCapacity" placeholder="Capacity (players)" required>
+              
+              <div class="checkbox-group">
+                <label><input type="checkbox" id="groundLighting"> Lighting</label>
+                <label><input type="checkbox" id="groundParking"> Parking</label>
+                <label><input type="checkbox" id="groundChangeRoom"> Change Room</label>
+                <label><input type="checkbox" id="groundWashroom"> Washroom</label>
+                <label><input type="checkbox" id="groundCafeteria"> Cafeteria</label>
+                <label><input type="checkbox" id="groundEquipment"> Equipment</label>
+              </div>
+            </div>
+
+            <!-- Amenities -->
+            <div class="form-group">
+              <h4>Amenities</h4>
+              <div class="checkbox-group">
+                <label><input type="checkbox" value="Floodlights"> Floodlights</label>
+                <label><input type="checkbox" value="Parking"> Parking</label>
+                <label><input type="checkbox" value="Washroom"> Washroom</label>
+                <label><input type="checkbox" value="Changing Room"> Changing Room</label>
+                <label><input type="checkbox" value="Drinking Water"> Drinking Water</label>
+                <label><input type="checkbox" value="Cafeteria"> Cafeteria</label>
+                <label><input type="checkbox" value="Equipment Rental"> Equipment Rental</label>
+                <label><input type="checkbox" value="First Aid"> First Aid</label>
+                <label><input type="checkbox" value="Shower"> Shower</label>
+                <label><input type="checkbox" value="Lockers"> Lockers</label>
+              </div>
+            </div>
+
+            <!-- Owner Information -->
+            <div class="form-group">
+              <h4>Owner Information</h4>
+              <input type="text" id="ownerName" placeholder="Owner Name" required>
+              <input type="email" id="ownerEmail" placeholder="Owner Email" required>
+              <input type="tel" id="ownerContact" placeholder="Owner Contact" required>
+            </div>
+
+            <!-- Policies -->
+            <div class="form-group">
+              <h4>Policies</h4>
+              <textarea id="cancellationPolicy" placeholder="Cancellation Policy"></textarea>
+              <input type="number" id="advanceBooking" placeholder="Advance Booking (days)" value="30">
+              <textarea id="groundRules" placeholder="Ground Rules (one per line)"></textarea>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn-primary">Add Ground</button>
+              <button type="button" onclick="hideAddGroundForm()" class="btn-secondary">Cancel</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Grounds List -->
+        <div id="groundsList">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>City</th>
+                <th>Price/Hour</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="groundsTableBody">
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Locations Section -->
+      <section id="locationsSection" style="display: none;">
+        <div class="section-header">
+          <h2>Manage Locations</h2>
+          <button onclick="showAddLocationForm()" class="btn-primary">Add New Location</button>
+        </div>
+
+        <!-- Add Location Form -->
+        <div id="addLocationForm" style="display: none;" class="form-container">
+          <h3>Add New Location</h3>
+          <form id="locationForm">
+            <input type="text" id="locationId" placeholder="Location ID (e.g., kolkata)" required>
+            <input type="text" id="locationName" placeholder="Location Name" required>
+            <input type="text" id="locationState" placeholder="State" required>
+            <input type="number" id="locationLat" placeholder="Latitude" step="any" required>
+            <input type="number" id="locationLng" placeholder="Longitude" step="any" required>
+            <label><input type="checkbox" id="locationPopular"> Popular Location</label>
+            <div class="form-actions">
+              <button type="submit" class="btn-primary">Add Location</button>
+              <button type="button" onclick="hideAddLocationForm()" class="btn-secondary">Cancel</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Locations List -->
+        <div id="locationsList">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>State</th>
+                <th>Popular</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="locationsTableBody">
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
   </div>
-  <div id="admin-panel" style="display:none;">
-    <div class="sidebar">
-      <h2>Admin</h2>
-      <ul>
-        <li data-section="dashboard">Dashboard</li>
-        <li data-section="users">Users</li>
-        <li data-section="grounds">Grounds</li>
-        <li data-section="locations">Locations</li>
-        <li data-section="payments">Payments</li>
-        <li id="logout-btn">Logout</li>
-      </ul>
-    </div>
-    <div class="main-content">
-      <div id="dashboard-section" class="section"></div>
-      <div id="users-section" class="section" style="display:none;"></div>
-      <div id="grounds-section" class="section" style="display:none;"></div>
-      <div id="locations-section" class="section" style="display:none;"></div>
-      <div id="payments-section" class="section" style="display:none;"></div>
-    </div>
-  </div>
+
   <script src="admin.js"></script>
 </body>
 </html> 

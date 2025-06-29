@@ -58,6 +58,22 @@ interface TimeSlot {
   isAvailable: boolean;
 }
 
+// Helper to format 24-hour slots to AM/PM
+function formatSlotLabel(startHour: number): string {
+  const start = new Date(2000, 0, 1, startHour, 0);
+  const end = new Date(2000, 0, 1, (startHour + 1) % 24, 0);
+  const formatTime = (d: Date) =>
+    d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+  return `${formatTime(start)} – ${formatTime(end)}`;
+}
+
+const ALL_24H_SLOTS = Array.from({ length: 24 }, (_, i) => {
+  return {
+    slot: `${i.toString().padStart(2, '0')}:00-${((i + 1) % 24).toString().padStart(2, '0')}:00`,
+    label: formatSlotLabel(i),
+  };
+});
+
 const BookingModal = ({
   isOpen,
   onClose,
@@ -103,23 +119,42 @@ const BookingModal = ({
     }
   }, [ground, bookingData.date]);
 
+  useEffect(() => {
+    if (isOpen) {
+      setBookingData({
+        date: selectedDate || new Date(),
+        timeSlot: selectedTimeSlot || "",
+        teamName: "",
+        playerCount: "",
+        contactPerson: {
+          name: user?.name || "",
+          phone: user?.phone || "",
+          email: user?.email || "",
+        },
+        requirements: "",
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, selectedDate, selectedTimeSlot, user]);
+
   const fetchAvailability = async () => {
     if (!ground) return;
-
     try {
       setIsLoadingSlots(true);
       const dateStr = format(bookingData.date, "yyyy-MM-dd");
       const response = await groundsApi.getAvailability(ground._id, dateStr);
-
       if (response.success) {
-        const slots = response.availability.allSlots.map((slot: string) => ({
+        const slots = ALL_24H_SLOTS.map(({ slot, label }) => ({
           slot,
+          label,
           isAvailable: response.availability.availableSlots.includes(slot),
         }));
         setAvailableSlots(slots);
+      } else {
+        setAvailableSlots(ALL_24H_SLOTS.map(({ slot, label }) => ({ slot, label, isAvailable: true })));
       }
     } catch (error) {
-      console.error("Failed to fetch availability:", error);
+      setAvailableSlots(ALL_24H_SLOTS.map(({ slot, label }) => ({ slot, label, isAvailable: true })));
       toast.error("Failed to load available time slots");
     } finally {
       setIsLoadingSlots(false);
@@ -229,32 +264,47 @@ const BookingModal = ({
             <Label>Select Date</Label>
             <Popover>
               <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    "w-full justify-start text-left font-normal",
-                    !bookingData.date && "text-muted-foreground",
-                  )}
-                >
-                  <Calendar className="mr-2 h-4 w-4" />
+                <div tabIndex={0} role="button" aria-label="Select date" className={cn(
+                  "w-full border rounded-lg px-4 py-3 flex items-center cursor-pointer bg-white focus:outline-none focus:ring-2 focus:ring-cricket-green shadow-sm hover:shadow-md transition-all",
+                  !bookingData.date && "text-muted-foreground"
+                )}>
+                  <Calendar className="mr-2 h-5 w-5 text-cricket-green" />
                   {bookingData.date ? (
                     format(bookingData.date, "PPP")
                   ) : (
                     <span>Pick a date</span>
                   )}
-                </Button>
+                </div>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <CalendarComponent
-                  mode="single"
-                  selected={bookingData.date}
-                  onSelect={(date) =>
-                    date &&
-                    setBookingData((prev) => ({ ...prev, date, timeSlot: "" }))
-                  }
-                  disabled={(date) => date < new Date()}
-                  initialFocus
-                />
+              <PopoverContent className="w-[350px] p-0 rounded-xl shadow-lg" side="bottom" align="start" onInteractOutside={e => e.preventDefault()}>
+                <div className="p-3">
+                  <CalendarComponent
+                    mode="single"
+                    selected={bookingData.date}
+                    onSelect={(date) =>
+                      date && setBookingData((prev) => ({ ...prev, date, timeSlot: "" }))
+                    }
+                    disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
+                    initialFocus
+                    showOutsideDays
+                  />
+                  <div className="flex justify-between mt-2 gap-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setBookingData((prev) => ({ ...prev, date: new Date(), timeSlot: "" }))}
+                    >
+                      Today
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setBookingData((prev) => ({ ...prev, date: undefined, timeSlot: "" }))}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                </div>
               </PopoverContent>
             </Popover>
           </div>
@@ -264,40 +314,50 @@ const BookingModal = ({
             <Label>Select Time Slot</Label>
             {isLoadingSlots ? (
               <div className="flex items-center justify-center py-8">
-                <div className="w-6 h-6 border-2 border-cricket-green border-t-transparent rounded-full animate-spin" />
+                <div className="w-8 h-8 border-2 border-cricket-green border-t-transparent rounded-full animate-spin" />
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-2">
-                {availableSlots.map((slot) => (
-                  <Button
-                    key={slot.slot}
-                    variant={
-                      bookingData.timeSlot === slot.slot ? "default" : "outline"
-                    }
-                    disabled={!slot.isAvailable}
-                    onClick={() =>
-                      setBookingData((prev) => ({
-                        ...prev,
-                        timeSlot: slot.slot,
-                      }))
-                    }
-                    className={cn(
-                      "text-sm",
-                      bookingData.timeSlot === slot.slot &&
-                        "bg-cricket-green hover:bg-cricket-green/90",
-                      !slot.isAvailable && "opacity-50 cursor-not-allowed",
-                    )}
-                  >
-                    <Clock className="w-3 h-3 mr-1" />
-                    {slot.slot}
-                    {!slot.isAvailable && (
-                      <Badge variant="destructive" className="ml-1 text-xs">
-                        Booked
-                      </Badge>
-                    )}
-                  </Button>
-                ))}
-              </div>
+              <>
+                {(() => {
+                  // Filter slots: only show future slots for today, and available ones
+                  const now = new Date();
+                  const isToday = bookingData.date && format(bookingData.date, 'yyyy-MM-dd') === format(now, 'yyyy-MM-dd');
+                  const currentHour = now.getHours();
+                  const filteredSlots = availableSlots.filter(slotObj => {
+                    const slotHour = parseInt(slotObj.slot.split(':')[0], 10);
+                    if (isToday && slotHour <= currentHour) return false; // Hide past slots for today
+                    return true;
+                  });
+                  const amSlots = filteredSlots.filter(slot => parseInt(slot.slot.split(':')[0], 10) < 12);
+                  const pmSlots = filteredSlots.filter(slot => parseInt(slot.slot.split(':')[0], 10) >= 12);
+                  if (filteredSlots.length === 0) {
+                    return <div className="text-center text-gray-500 py-4">No available slots for this day</div>;
+                  }
+                  return (
+                    <select
+                      className="w-full border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cricket-green text-base bg-white disabled:bg-gray-100 disabled:text-gray-400 shadow-sm hover:shadow-md transition-all"
+                      value={bookingData.timeSlot || ''}
+                      onChange={e => setBookingData(prev => ({ ...prev, timeSlot: e.target.value }))}
+                    >
+                      <option value="" disabled>Select a time slot</option>
+                      <optgroup label="AM">
+                        {amSlots.map(slot => (
+                          <option key={slot.slot} value={slot.slot} disabled={!slot.isAvailable}>
+                            {slot.label} {slot.isAvailable ? '' : '(Booked)'}
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="PM">
+                        {pmSlots.map(slot => (
+                          <option key={slot.slot} value={slot.slot} disabled={!slot.isAvailable}>
+                            {slot.label} {slot.isAvailable ? '' : '(Booked)'}
+                          </option>
+                        ))}
+                      </optgroup>
+                    </select>
+                  );
+                })()}
+              </>
             )}
           </div>
 

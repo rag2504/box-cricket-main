@@ -36,7 +36,7 @@ const groundSchema = new mongoose.Schema({
   },
   images: [
     {
-      url: { type: String, required: true },
+      url: { type: String, required: false },
       alt: { type: String, default: "" },
       isPrimary: { type: Boolean, default: false },
     },
@@ -73,7 +73,7 @@ const groundSchema = new mongoose.Schema({
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      required: false,
     },
     name: { type: String, required: true },
     contact: { type: String, required: true },
@@ -166,18 +166,27 @@ app.post('/api/admin/grounds', adminAuth, async (req, res) => {
     // Validate cityId
     const city = await Location.findOne({ id: req.body.location.cityId });
     if (!city) return res.status(400).json({ message: 'Invalid cityId' });
-    
-    // Fill cityName/state/lat/lng from city
-    req.body.location.cityName = city.name;
-    req.body.location.state = city.state;
-    req.body.location.latitude = city.latitude;
-    req.body.location.longitude = city.longitude;
+    // Always set the full location object from the Locations collection
+    req.body.location = {
+      cityId: city.id,
+      cityName: city.name,
+      state: city.state,
+      latitude: city.latitude,
+      longitude: city.longitude,
+      address: req.body.location.address,
+      pincode: req.body.location.pincode
+    };
     
     // Set default values for required fields
     const groundData = {
       ...req.body,
       status: "active",
       isVerified: true,
+      // Provide a default userId for owner if not provided
+      owner: {
+        ...req.body.owner,
+        userId: req.body.owner?.userId || new mongoose.Types.ObjectId(),
+      },
       availability: req.body.availability || {
         timeSlots: ["06:00-07:00", "07:00-08:00", "08:00-09:00", "09:00-10:00", "10:00-11:00", "11:00-12:00", "12:00-13:00", "13:00-14:00", "14:00-15:00", "15:00-16:00", "16:00-17:00", "17:00-18:00", "18:00-19:00", "19:00-20:00", "20:00-21:00", "21:00-22:00"],
         blockedDates: [],
@@ -190,13 +199,6 @@ app.post('/api/admin/grounds', adminAuth, async (req, res) => {
           saturday: { isOpen: true, slots: ["06:00-07:00", "07:00-08:00", "08:00-09:00", "09:00-10:00", "10:00-11:00", "11:00-12:00", "12:00-13:00", "13:00-14:00", "14:00-15:00", "15:00-16:00", "16:00-17:00", "17:00-18:00", "18:00-19:00", "19:00-20:00", "20:00-21:00", "21:00-22:00"] },
           sunday: { isOpen: true, slots: ["06:00-07:00", "07:00-08:00", "08:00-09:00", "09:00-10:00", "10:00-11:00", "11:00-12:00", "12:00-13:00", "13:00-14:00", "14:00-15:00", "15:00-16:00", "16:00-17:00", "17:00-18:00", "18:00-19:00", "19:00-20:00", "20:00-21:00", "21:00-22:00"] }
         }
-      },
-      owner: req.body.owner || {
-        userId: new mongoose.Types.ObjectId(), // Create a dummy ObjectId
-        name: "Admin",
-        contact: "+91-9999999999",
-        email: "admin@boxcric.com",
-        verified: true
       },
       rating: req.body.rating || {
         average: 0,
@@ -277,7 +279,18 @@ const indianCities = [
   { id: "kolkata", name: "Kolkata", state: "West Bengal", latitude: 22.5726, longitude: 88.3639, popular: true },
   { id: "pune", name: "Pune", state: "Maharashtra", latitude: 18.5204, longitude: 73.8567, popular: true },
   { id: "ahmedabad", name: "Ahmedabad", state: "Gujarat", latitude: 23.0225, longitude: 72.5714, popular: true },
-  // ... (add more cities as needed)
+  { id: "jaipur", name: "Jaipur", state: "Rajasthan", latitude: 26.9124, longitude: 75.7873, popular: false },
+  { id: "lucknow", name: "Lucknow", state: "Uttar Pradesh", latitude: 26.8467, longitude: 80.9462, popular: false },
+  { id: "kanpur", name: "Kanpur", state: "Uttar Pradesh", latitude: 26.4499, longitude: 80.3319, popular: false },
+  { id: "nagpur", name: "Nagpur", state: "Maharashtra", latitude: 21.1458, longitude: 79.0882, popular: false },
+  { id: "indore", name: "Indore", state: "Madhya Pradesh", latitude: 22.7196, longitude: 75.8577, popular: false },
+  { id: "thane", name: "Thane", state: "Maharashtra", latitude: 19.2183, longitude: 72.9781, popular: false },
+  { id: "bhopal", name: "Bhopal", state: "Madhya Pradesh", latitude: 23.2599, longitude: 77.4126, popular: false },
+  { id: "visakhapatnam", name: "Visakhapatnam", state: "Andhra Pradesh", latitude: 17.6868, longitude: 83.2185, popular: false },
+  { id: "patna", name: "Patna", state: "Bihar", latitude: 25.5941, longitude: 85.1376, popular: false },
+  { id: "vadodara", name: "Vadodara", state: "Gujarat", latitude: 22.3072, longitude: 73.1812, popular: false },
+  { id: "ghaziabad", name: "Ghaziabad", state: "Uttar Pradesh", latitude: 28.6692, longitude: 77.4538, popular: false },
+  { id: "ludhiana", name: "Ludhiana", state: "Punjab", latitude: 30.9010, longitude: 75.8573, popular: false },
 ];
 
 // --- Auto-populate locations if empty ---

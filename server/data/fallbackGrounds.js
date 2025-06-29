@@ -73,7 +73,7 @@ export const fallbackGrounds = [
     owner: {
       userId: "owner_mumbai_1",
       name: "Raj Patel",
-      contact: "+91 9876543210",
+      contact: "-",
       email: "raj.patel@example.com",
       verified: true,
     },

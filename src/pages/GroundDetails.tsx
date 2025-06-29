@@ -18,7 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Navbar from "@/components/Navbar";
-import BookingModal from "@/components/BookingModal";
+import NewBookingModal from "@/components/NewBookingModal";
 import { groundsApi } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -36,6 +36,7 @@ const GroundDetails = () => {
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>("");
   const [reviews, setReviews] = useState<any[]>([]);
   const [isFavorite, setIsFavorite] = useState(false);
+  const [slotRetryCount, setSlotRetryCount] = useState(0);
 
   useEffect(() => {
     if (id) {
@@ -47,9 +48,22 @@ const GroundDetails = () => {
   const fetchGroundDetails = async () => {
     try {
       setIsLoading(true);
-      const response = await groundsApi.getGround(id!);
+      console.log("Fetching ground details for ID:", id);
+      
+      if (!id || id === "undefined") {
+        throw new Error("Invalid ground ID");
+      }
+      
+      const response = await groundsApi.getGround(id);
+      console.log("Ground details response:", response);
+      
+      //@ts-ignore
       if (response.success) {
+        //@ts-ignore
         setGround(response.ground);
+      } else {
+        //@ts-ignore
+        throw new Error(response.message || "Failed to fetch ground details");
       }
     } catch (error: any) {
       console.error("Failed to fetch ground details:", error);
@@ -63,7 +77,11 @@ const GroundDetails = () => {
   const fetchReviews = async () => {
     try {
       const response = await groundsApi.getReviews(id!, { limit: 5 });
+      console.log("Reviews response:", response);
+      
+      //@ts-ignore
       if (response.success) {
+        //@ts-ignore
         setReviews(response.reviews);
       }
     } catch (error) {
@@ -148,6 +166,23 @@ const GroundDetails = () => {
     );
   }
 
+  // Ensure ground has required properties with fallbacks
+  const safeGround = {
+    _id: ground._id || id || "unknown",
+    name: ground.name || "Unknown Ground",
+    description: ground.description || "No description available",
+    location: ground.location || { address: "Address not available" },
+    price: ground.price || { perHour: 0, discount: 0 },
+    images: ground.images || [],
+    amenities: ground.amenities || [],
+    features: ground.features || { pitchType: "Unknown", capacity: 0, lighting: false, parking: false },
+    rating: ground.rating || { average: 0, count: 0 },
+    owner: ground.owner || { name: "Unknown", contact: "N/A", email: "N/A", verified: false },
+    totalBookings: ground.totalBookings || 0,
+    isVerified: ground.isVerified || false,
+    policies: ground.policies || { cancellation: "Standard policy", rules: [] },
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-grass-light via-white to-sky-blue/10">
       <Navbar />
@@ -189,15 +224,17 @@ const GroundDetails = () => {
               <div className="aspect-video rounded-lg overflow-hidden">
                 <img
                   src={
-                    ground.images[currentImageIndex]?.url || "/placeholder.svg"
+                    safeGround.images[currentImageIndex]?.url || 
+                    safeGround.images[currentImageIndex] || 
+                    "/placeholder.svg"
                   }
-                  alt={ground.name}
+                  alt={safeGround.name}
                   className="w-full h-full object-cover"
                 />
               </div>
 
               {/* Image Navigation */}
-              {ground.images.length > 1 && (
+              {safeGround.images.length > 1 && (
                 <>
                   <button
                     onClick={() => handleImageNavigation("prev")}
@@ -214,7 +251,7 @@ const GroundDetails = () => {
 
                   {/* Image Indicators */}
                   <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-2">
-                    {ground.images.map((_: any, index: number) => (
+                    {safeGround.images.map((_: any, index: number) => (
                       <button
                         key={index}
                         onClick={() => setCurrentImageIndex(index)}
@@ -236,11 +273,11 @@ const GroundDetails = () => {
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                    {ground.name}
+                    {safeGround.name}
                   </h1>
                   <div className="flex items-center space-x-1 text-gray-600 mb-3">
                     <MapPin className="w-5 h-5" />
-                    <span>{ground.location.address}</span>
+                    <span>{safeGround.location.address}</span>
                     {ground.distance && (
                       <span className="text-cricket-green font-medium">
                         • {ground.distance.toFixed(1)} km away
@@ -251,13 +288,13 @@ const GroundDetails = () => {
                     <div className="flex items-center space-x-1">
                       <Star className="w-5 h-5 fill-yellow-400 text-yellow-400" />
                       <span className="font-semibold">
-                        {ground.rating.average}
+                        {safeGround.rating.average}
                       </span>
                       <span className="text-gray-600">
-                        ({ground.rating.count} reviews)
+                        ({safeGround.rating.count} reviews)
                       </span>
                     </div>
-                    {ground.isVerified && (
+                    {safeGround.isVerified && (
                       <Badge className="bg-cricket-green text-white">
                         Verified
                       </Badge>
@@ -266,19 +303,19 @@ const GroundDetails = () => {
                 </div>
                 <div className="text-right">
                   <div className="text-3xl font-bold text-cricket-green">
-                    ₹{ground.price.perHour}
+                    ₹{safeGround.price.perHour}
                     <span className="text-lg text-gray-600">/hour</span>
                   </div>
-                  {ground.price.discount > 0 && (
+                  {safeGround.price.discount > 0 && (
                     <div className="text-sm text-green-600">
-                      {ground.price.discount}% discount available
+                      {safeGround.price.discount}% discount available
                     </div>
                   )}
                 </div>
               </div>
 
               <p className="text-gray-700 leading-relaxed">
-                {ground.description}
+                {safeGround.description}
               </p>
             </div>
 
@@ -298,7 +335,7 @@ const GroundDetails = () => {
                   </CardHeader>
                   <CardContent>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      {ground.amenities.map(
+                      {safeGround.amenities.map(
                         (amenity: string, index: number) => (
                           <div
                             key={index}
@@ -324,19 +361,19 @@ const GroundDetails = () => {
                       <div>
                         <span className="text-gray-600">Pitch Type:</span>
                         <div className="font-medium">
-                          {ground.features.pitchType}
+                          {safeGround.features.pitchType}
                         </div>
                       </div>
                       <div>
                         <span className="text-gray-600">Capacity:</span>
                         <div className="font-medium">
-                          {ground.features.capacity} players
+                          {safeGround.features.capacity} players
                         </div>
                       </div>
                       <div>
                         <span className="text-gray-600">Night Lighting:</span>
                         <div className="font-medium">
-                          {ground.features.lighting
+                          {safeGround.features.lighting
                             ? "Available"
                             : "Not available"}
                         </div>
@@ -344,7 +381,7 @@ const GroundDetails = () => {
                       <div>
                         <span className="text-gray-600">Parking:</span>
                         <div className="font-medium">
-                          {ground.features.parking
+                          {safeGround.features.parking
                             ? "Available"
                             : "Not available"}
                         </div>
@@ -363,14 +400,13 @@ const GroundDetails = () => {
                     <div>
                       <h4 className="font-medium mb-2">Cancellation Policy</h4>
                       <p className="text-gray-700 text-sm">
-                        {ground.policies?.cancellation ||
-                          "Standard cancellation policy applies"}
+                        {safeGround.policies.cancellation}
                       </p>
                     </div>
                     <div>
                       <h4 className="font-medium mb-2">Ground Rules</h4>
                       <ul className="text-gray-700 text-sm space-y-1">
-                        {ground.policies?.rules?.map(
+                        {safeGround.policies.rules.map(
                           (rule: string, index: number) => (
                             <li
                               key={index}
@@ -455,7 +491,7 @@ const GroundDetails = () => {
               <CardContent className="space-y-4">
                 <div className="text-center">
                   <div className="text-2xl font-bold text-cricket-green">
-                    ₹{ground.price.perHour}
+                    ₹{safeGround.price.perHour}
                     <span className="text-lg text-gray-600">/hour</span>
                   </div>
                 </div>
@@ -482,17 +518,17 @@ const GroundDetails = () => {
               <CardContent className="space-y-3">
                 <div>
                   <span className="text-gray-600">Owner:</span>
-                  <div className="font-medium">{ground.owner.name}</div>
+                  <div className="font-medium">{safeGround.owner.name}</div>
                 </div>
                 <div>
                   <span className="text-gray-600">Phone:</span>
-                  <div className="font-medium">{ground.owner.contact}</div>
+                  <div className="font-medium">{safeGround.owner.contact}</div>
                 </div>
                 <div>
                   <span className="text-gray-600">Email:</span>
-                  <div className="font-medium">{ground.owner.email}</div>
+                  <div className="font-medium">{safeGround.owner.email}</div>
                 </div>
-                {ground.owner.verified && (
+                {safeGround.owner.verified && (
                   <Badge className="bg-green-100 text-green-800">
                     Verified Owner
                   </Badge>
@@ -508,11 +544,11 @@ const GroundDetails = () => {
               <CardContent className="space-y-3">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Total Bookings:</span>
-                  <span className="font-medium">{ground.totalBookings}</span>
+                  <span className="font-medium">{safeGround.totalBookings}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Average Rating:</span>
-                  <span className="font-medium">{ground.rating.average}/5</span>
+                  <span className="font-medium">{safeGround.rating.average}/5</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Response Rate:</span>
@@ -525,12 +561,10 @@ const GroundDetails = () => {
       </div>
 
       {/* Booking Modal */}
-      <BookingModal
+      <NewBookingModal
         isOpen={isBookingModalOpen}
         onClose={() => setIsBookingModalOpen(false)}
-        ground={ground}
-        selectedDate={selectedDate}
-        selectedTimeSlot={selectedTimeSlot}
+        ground={safeGround}
         onBookingCreated={handleBookingCreated}
       />
     </div>

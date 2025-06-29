@@ -1,8 +1,9 @@
 import express from "express";
 import Razorpay from "razorpay";
 import crypto from "crypto";
-import { demoBookings } from "./bookings.js";
-import { fallbackGrounds } from "../data/fallbackGrounds.js";
+import { authMiddleware } from "../middleware/auth.js";
+import Booking from "../models/Booking.js";
+import Ground from "../models/Ground.js";
 
 // Use environment variables for Razorpay keys (do NOT hardcode in production)
 const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || "rzp_test_jF5rv9Bm4rqWDz";
@@ -18,38 +19,61 @@ const router = express.Router();
 /**
  * Create a Razorpay order using real Razorpay API
  */
-router.post("/create-order", async (req, res) => {
-  const { bookingId } = req.body;
-  // Accept both id and _id for bookingId for compatibility
-  const booking = demoBookings.find((b) => b.id === bookingId || b._id === bookingId);
-  if (!booking) {
-    console.error("Booking not found for bookingId:", bookingId);
-    return res.status(404).json({ success: false, message: "Booking not found" });
-  }
-
-  // Calculate amount in paise (Razorpay needs amount in smallest unit)
-  const totalAmount = booking.pricing?.totalAmount ?? booking.amount ?? 500;
-  const amountPaise = Math.round(totalAmount * 100);
-
-  if (!amountPaise || amountPaise < 100) {
-    console.error("Invalid amount (must be >= 100 paise):", amountPaise);
-    return res.status(400).json({ success: false, message: "Booking amount must be at least ₹1" });
-  }
-
+router.post("/create-order", authMiddleware, async (req, res) => {
   try {
+    const { bookingId } = req.body;
+    const userId = req.userId;
+    if (!bookingId || bookingId === "undefined") {
+      return res.status(400).json({ success: false, message: "Invalid booking ID" });
+    }
+
+    // Find the booking in MongoDB
+    const booking = await Booking.findOne({ 
+      _id: bookingId, 
+      userId 
+    }).populate("groundId", "name location price features");
+
+    if (!booking) {
+      console.error("Booking not found for bookingId:", bookingId);
+      return res.status(404).json({ 
+        success: false, 
+        message: "Booking not found" 
+      });
+    }
+
+    // Calculate amount in paise (Razorpay needs amount in smallest unit)
+    const totalAmount = booking.pricing?.totalAmount || 500;
+    const amountPaise = Math.round(totalAmount * 100);
+
+    if (!amountPaise || amountPaise < 100) {
+      console.error("Invalid amount (must be >= 100 paise):", amountPaise);
+      return res.status(400).json({ 
+        success: false, 
+        message: "Booking amount must be at least ₹1" 
+      });
+    }
+
     console.log("Creating Razorpay order with:", {
       amount: amountPaise,
-      currency: booking.currency || "INR",
-      receipt: `receipt_order_${booking.id || booking._id}`,
+      currency: "INR",
+      receipt: `receipt_order_${booking._id}`,
       payment_capture: 1,
     });
 
     const order = await razorpay.orders.create({
       amount: amountPaise,
-      currency: booking.currency || "INR",
-      receipt: `receipt_order_${booking.id || booking._id}`,
+      currency: "INR",
+      receipt: `receipt_order_${booking._id}`,
       payment_capture: 1,
     });
+
+    // Update booking with payment order details
+    booking.payment = {
+      ...booking.payment,
+      razorpayOrderId: order.id,
+      status: "pending"
+    };
+    await booking.save();
 
     // ⚠️ IMPORTANT: Always send the key as part of your API response!
     res.json({
@@ -67,89 +91,136 @@ router.post("/create-order", async (req, res) => {
     // Log the full error for debugging
     console.error('Razorpay order creation error:', error);
     // Send a basic message to the frontend
-    res.status(500).json({ success: false, message: error?.error?.description || error.message || "Failed to create Razorpay order." });
+    res.status(500).json({ 
+      success: false, 
+      message: error?.error?.description || error.message || "Failed to create Razorpay order." 
+    });
   }
 });
 
 /**
- * Verify Razorpay payment signature and mark booking as confirmed (in-memory)
+ * Verify Razorpay payment signature and mark booking as confirmed
  */
-router.post("/verify-payment", (req, res) => {
-  const {
-    razorpay_order_id,
-    razorpay_payment_id,
-    razorpay_signature,
-    bookingId,
-  } = req.body;
+router.post("/verify-payment", authMiddleware, async (req, res) => {
+  try {
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      bookingId,
+    } = req.body;
 
-  if (
-    !razorpay_order_id ||
-    !razorpay_payment_id ||
-    !razorpay_signature ||
-    !bookingId
-  ) {
-    return res.status(400).json({
+    const userId = req.userId;
+    if (!bookingId || bookingId === "undefined") {
+      return res.status(400).json({ success: false, message: "Invalid booking ID" });
+    }
+
+    // Signature verification
+    const generatedSignature = crypto
+      .createHmac("sha256", RAZORPAY_KEY_SECRET)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest("hex");
+
+    if (generatedSignature !== razorpay_signature) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payment signature",
+      });
+    }
+
+    // Find the booking in MongoDB
+    const booking = await Booking.findOne({ 
+      _id: bookingId, 
+      userId 
+    }).populate("groundId", "name location price features");
+
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: "Booking not found",
+      });
+    }
+
+    // Update booking with payment details
+    booking.payment = {
+      razorpayOrderId: razorpay_order_id,
+      razorpayPaymentId: razorpay_payment_id,
+      razorpaySignature: razorpay_signature,
+      status: "completed",
+      paidAt: new Date(),
+    };
+    booking.status = "confirmed";
+    booking.confirmation = {
+      confirmedAt: new Date(),
+      confirmationCode: `CONF${Date.now().toString(36).toUpperCase()}`,
+      groundOwnerNotified: false
+    };
+
+    await booking.save();
+
+    res.json({
+      success: true,
+      message: "Payment verified and booking confirmed!",
+      booking: booking.toObject(),
+    });
+  } catch (error) {
+    console.error("Payment verification error:", error);
+    res.status(500).json({
       success: false,
-      message: "Missing payment verification data",
+      message: "Failed to verify payment",
     });
   }
+});
 
-  // Signature verification
-  const generatedSignature = crypto
-    .createHmac("sha256", RAZORPAY_KEY_SECRET)
-    .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-    .digest("hex");
+/**
+ * Handle payment failure
+ */
+router.post("/payment-failed", authMiddleware, async (req, res) => {
+  try {
+    const { bookingId, razorpay_order_id, error } = req.body;
+    const userId = req.userId;
+    if (!bookingId || bookingId === "undefined") {
+      return res.status(400).json({ success: false, message: "Invalid booking ID" });
+    }
 
-  if (generatedSignature !== razorpay_signature) {
-    return res.status(400).json({
+    const booking = await Booking.findOne({ 
+      _id: bookingId, 
+      userId 
+    });
+
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: "Booking not found",
+      });
+    }
+
+    booking.payment = {
+      ...booking.payment,
+      razorpayOrderId: razorpay_order_id,
+      status: "failed"
+    };
+    booking.status = "cancelled";
+    booking.cancellation = {
+      cancelledBy: "system",
+      cancelledAt: new Date(),
+      reason: "Payment failed"
+    };
+
+    await booking.save();
+
+    res.json({
+      success: true,
+      message: "Payment failure recorded",
+      booking: booking.toObject(),
+    });
+  } catch (error) {
+    console.error("Payment failure handling error:", error);
+    res.status(500).json({
       success: false,
-      message: "Invalid payment signature",
+      message: "Failed to record payment failure",
     });
   }
-
-  // Accept both id and _id for bookingId for compatibility
-  const booking = demoBookings.find((b) => b.id === bookingId || b._id === bookingId);
-  if (!booking) {
-    return res.status(404).json({
-      success: false,
-      message: "Booking not found",
-    });
-  }
-  booking.payment = {
-    razorpayOrderId: razorpay_order_id,
-    razorpayPaymentId: razorpay_payment_id,
-    razorpaySignature: razorpay_signature,
-    status: "completed",
-    paidAt: new Date().toISOString(),
-  };
-  booking.status = "confirmed";
-
-  // Attach safe ground details for frontend
-  const ground = fallbackGrounds.find((g) => g._id === booking.groundId) || {};
-  const safeGround = {
-    _id: ground._id || booking.groundId,
-    name: ground.name || "Unknown Ground",
-    description: ground.description || "",
-    location: ground.location || {},
-    price: ground.price || {},
-    images: ground.images || [],
-    amenities: ground.amenities || [],
-    features: ground.features || {},
-    availability: ground.availability || {},
-    status: ground.status || "active",
-    isVerified: ground.isVerified !== undefined ? ground.isVerified : true,
-    totalBookings: ground.totalBookings || 0,
-    rating: ground.rating || { average: 0, count: 0, reviews: [] },
-    owner: ground.owner || {},
-    verificationDocuments: ground.verificationDocuments || {},
-    policies: ground.policies || {},
-  };
-
-  res.json({
-    success: true,
-    message: "Payment verified and booking confirmed!",
-    booking: { ...booking, ground: safeGround },
-  });
 });
 
 export default router;

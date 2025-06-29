@@ -38,15 +38,15 @@ app.use(express.urlencoded({ extended: true }));
 // MongoDB Connection
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://rag123456:rag123456@cluster0.qipvo.mongodb.net/boxcricket?retryWrites=true&w=majority';
 
-mongoose
-  .connect(MONGODB_URI)
-  .then(() => {
-    console.log("✅ Connected to MongoDB Atlas");
-  })
-  .catch((error) => {
-    console.error("❌ MongoDB connection error:", error);
-    console.log("⚠️  Running without database connection");
-  });
+  mongoose
+    .connect(MONGODB_URI)
+    .then(() => {
+      console.log("✅ Connected to MongoDB Atlas");
+    })
+    .catch((error) => {
+      console.error("❌ MongoDB connection error:", error);
+      console.log("⚠️  Running without database connection");
+    });
 
 // Socket.IO for real-time updates
 io.on("connection", (socket) => {

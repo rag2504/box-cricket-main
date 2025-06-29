@@ -4,8 +4,17 @@ import nodemailer from "nodemailer";
 import User from "../models/User.js";
 import OTP from "../models/OTP.js";
 import { authMiddleware } from "../middleware/auth.js";
+import dotenv from "dotenv";
+dotenv.config();
 
 const router = express.Router();
+
+const DEFAULT_TIME_SLOTS = [
+  "06:00-07:00", "07:00-08:00", "08:00-09:00", "09:00-10:00",
+  "10:00-11:00", "11:00-12:00", "12:00-13:00", "13:00-14:00",
+  "14:00-15:00", "15:00-16:00", "16:00-17:00", "17:00-18:00",
+  "18:00-19:00", "19:00-20:00", "20:00-21:00", "21:00-22:00"
+];
 
 // Email transporter configuration
 const createTransporter = () => {
@@ -15,15 +24,20 @@ const createTransporter = () => {
     return null;
   }
 
-  return nodemailer.createTransporter({
-    host: process.env.EMAIL_HOST,
-    port: process.env.EMAIL_PORT,
-    secure: false,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
+  console.log("EMAIL_HOST:", process.env.EMAIL_HOST);
+  console.log("EMAIL_PORT:", process.env.EMAIL_PORT);
+  console.log("EMAIL_USER:", process.env.EMAIL_USER);
+  console.log("EMAIL_PASS:", process.env.EMAIL_PASS ? "SET" : "NOT SET");
+
+  return nodemailer.createTransport({
+  host: process.env.EMAIL_HOST,
+  port: Number(process.env.EMAIL_PORT),
+  secure: Number(process.env.EMAIL_PORT) === 465, // true for 465, false for 587
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
 };
 
 const transporter = createTransporter();

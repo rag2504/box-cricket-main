@@ -6,7 +6,7 @@ import Navbar from "@/components/Navbar";
 import LocationSelector from "@/components/LocationSelector";
 import GroundCard from "@/components/GroundCard";
 import FilterPanel from "@/components/FilterPanel";
-import BookingModal from "@/components/BookingModal";
+import NewBookingModal from "@/components/NewBookingModal";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -74,6 +74,14 @@ const Index = () => {
       fetchGrounds();
     }
   }, [selectedCity, searchQuery, filters]);
+
+  // Restore selected city from localStorage on mount
+  useEffect(() => {
+    const savedCity = localStorage.getItem("boxcric_selected_city");
+    if (savedCity) {
+      setSelectedCity(JSON.parse(savedCity));
+    }
+  }, []);
 
   const fetchGrounds = async () => {
     if (!selectedCity) return;
@@ -154,6 +162,7 @@ const Index = () => {
 
   const handleCitySelect = (city: City) => {
     setSelectedCity(city);
+    localStorage.setItem("boxcric_selected_city", JSON.stringify(city));
   };
 
   const handleSearch = (query: string) => {
@@ -182,6 +191,8 @@ const Index = () => {
   };
 
   const handleViewDetails = (groundId: string) => {
+    console.log("View details clicked for ground ID:", groundId);
+    console.log("Ground data:", displayGrounds.find(g => g._id === groundId));
     navigate(`/ground/${groundId}`);
   };
 
@@ -493,7 +504,7 @@ const Index = () => {
         onClearFilters={handleClearFilters}
       />
 
-      <BookingModal
+      <NewBookingModal
         isOpen={isBookingModalOpen}
         onClose={() => setIsBookingModalOpen(false)}
         ground={selectedGround}

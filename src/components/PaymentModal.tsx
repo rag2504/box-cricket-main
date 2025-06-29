@@ -13,7 +13,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 interface Booking {
-  id: string;
+  _id?: string; // MongoDB ID
+  id: string; // Legacy ID for compatibility
   bookingId: string;
   groundId?: any;
   ground?: any;
@@ -86,7 +87,7 @@ const PaymentModal = ({
 
       // Create order on backend
       const orderResponse = await paymentsApi.createOrder({
-        bookingId: booking.id,
+        bookingId: booking._id || booking.id,
       });
 
       if (!orderResponse.success) {
@@ -104,13 +105,55 @@ const PaymentModal = ({
           ? booking.groundId
           : booking.ground) || {};
 
+      let firstImage = "https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg";
+      if (
+        ground.images &&
+        Array.isArray(ground.images) &&
+        ground.images.length > 0
+      ) {
+        const imgItem = ground.images[0];
+        if (typeof imgItem === "string") {
+          firstImage = imgItem.startsWith('http') ? imgItem : "https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg";
+        } else if (imgItem && typeof imgItem === "object" && "url" in imgItem) {
+          firstImage = imgItem.url && imgItem.url.startsWith('http') ? imgItem.url : "https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg";
+        }
+      }
+
+      const address =
+        ground?.location?.address ||
+        (ground?.location ? ground.location : "") ||
+        "No address available";
+
+      // Defensive pricing fallback
+      const pricing = booking?.pricing || {
+        baseAmount: booking?.amount || 0,
+        discount: 0,
+        taxes: 0,
+        totalAmount: booking?.amount || 0,
+        duration: booking?.timeSlot?.duration || 1,
+      };
+      const baseAmount = pricing.baseAmount ?? 0;
+      const discount = pricing.discount ?? 0;
+      const taxes = pricing.taxes ?? 0;
+      const totalAmount = pricing.totalAmount ?? 0;
+      const duration = pricing.duration ?? 1;
+
+      const formatDate = (dateString: string) => {
+        return new Date(dateString).toLocaleDateString("en-IN", {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
+      };
+
       const options = {
         key, // <-- CRITICALLY IMPORTANT: use backend-provided key
         amount: order.amount,
         currency: order.currency,
         name: "BoxCric",
         description: `Booking for ${ground?.name || "Ground"}`,
-        image: "/placeholder.svg",
+        image: firstImage,
         order_id: order.id,
         prefill: {
           name: user.name,
@@ -118,7 +161,7 @@ const PaymentModal = ({
           contact: user.phone,
         },
         notes: {
-          booking_id: booking.bookingId,
+          booking_id: booking.bookingId || booking._id || booking.id,
           ground_name: ground?.name || "",
         },
         theme: {
@@ -136,7 +179,7 @@ const PaymentModal = ({
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
-              bookingId: booking.id,
+              bookingId: booking._id || booking.id,
             });
 
             if (verifyResponse.success) {
@@ -152,7 +195,7 @@ const PaymentModal = ({
             console.error("Payment verification error:", error);
             toast.error(error.message || "Payment verification failed");
             await paymentsApi.paymentFailed?.({
-              bookingId: booking.id,
+              bookingId: booking._id || booking.id,
               razorpay_order_id: response.razorpay_order_id,
               error: error.message,
             });
@@ -178,7 +221,7 @@ const PaymentModal = ({
       ? booking.groundId
       : booking.ground) || {};
 
-  let firstImage = "/placeholder.svg";
+  let firstImage = "https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg";
   if (
     ground.images &&
     Array.isArray(ground.images) &&
@@ -186,9 +229,9 @@ const PaymentModal = ({
   ) {
     const imgItem = ground.images[0];
     if (typeof imgItem === "string") {
-      firstImage = imgItem;
+      firstImage = imgItem.startsWith('http') ? imgItem : "https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg";
     } else if (imgItem && typeof imgItem === "object" && "url" in imgItem) {
-      firstImage = imgItem.url || "/placeholder.svg";
+      firstImage = imgItem.url && imgItem.url.startsWith('http') ? imgItem.url : "https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg";
     }
   }
 
