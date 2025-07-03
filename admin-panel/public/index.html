@@ -133,6 +133,16 @@
               <input type="tel" id="ownerContact" placeholder="Owner Contact" required>
             </div>
 
+            <!-- Rating -->
+            <div class="form-group">
+              <h4>Rating</h4>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <input type="number" id="groundRating" placeholder="Rating (0-5)" min="0" max="5" step="0.1" style="width: 150px;">
+                <span style="color: #666; font-size: 14px;">out of 5 stars</span>
+              </div>
+              <input type="number" id="groundRatingCount" placeholder="Number of reviews" min="0" style="width: 150px;">
+            </div>
+
             <!-- Policies -->
             <div class="form-group">
               <h4>Policies</h4>
@@ -156,6 +166,7 @@
                 <th>Name</th>
                 <th>City</th>
                 <th>Price/Hour</th>
+                <th>Rating</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>

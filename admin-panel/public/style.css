@@ -359,4 +359,26 @@ table tr:hover {
     background: #fef2f2;
     color: #dc2626;
     border: 1px solid #fecaca;
+}
+
+/* Rating Styles */
+.rating-display {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.rating-star {
+    color: #fbbf24;
+    font-size: 14px;
+}
+
+.rating-value {
+    font-weight: 500;
+    color: #1f2937;
+}
+
+.rating-count {
+    color: #6b7280;
+    font-size: 12px;
 } 

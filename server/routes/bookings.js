@@ -9,18 +9,29 @@ const router = express.Router();
 // Utility to calculate pricing
 function getPricing(ground, timeSlot) {
   let duration = 1;
+  let perHour = ground.price?.perHour || 500;
   if (timeSlot && typeof timeSlot === "object" && timeSlot.duration) {
     duration = Number(timeSlot.duration) || 1;
   }
-  const baseAmount = ground.price?.perHour ? ground.price.perHour * duration : 500;
+  // If price ranges exist, pick the correct perHour based on startTime
+  if (Array.isArray(ground.price?.ranges) && ground.price.ranges.length > 0 && timeSlot?.startTime) {
+    const slot = ground.price.ranges.find(r => r.start === timeSlot.startTime);
+    if (slot) {
+      perHour = slot.perHour;
+    } else {
+      // fallback: pick the first range
+      perHour = ground.price.ranges[0].perHour;
+    }
+  }
+  const baseAmount = perHour * duration;
   const discount = ground.price?.discount || 0;
   const discountedAmount = baseAmount - discount;
-  const taxes = Math.round(discountedAmount * 0.18); // 18% GST
-  const totalAmount = discountedAmount + taxes;
+  const convenienceFee = Math.round(discountedAmount * 0.02); // 2% convenience fee
+  const totalAmount = discountedAmount + convenienceFee;
   return {
     baseAmount,
     discount,
-    taxes,
+    convenienceFee,
     totalAmount,
     duration,
   };
@@ -114,13 +125,9 @@ router.post("/", authMiddleware, async (req, res) => {
     */
 
     // Calculate pricing
-    const baseAmount = ground.price?.perHour ? ground.price.perHour * duration : 500;
-    const discount = ground.price?.discount || 0;
-    const discountedAmount = baseAmount - discount;
-    const taxes = Math.round(discountedAmount * 0.18); // 18% GST
-    const totalAmount = discountedAmount + taxes;
+    const { baseAmount, discount, convenienceFee, totalAmount, duration: calcDuration } = getPricing(ground, timeSlot);
 
-    console.log("Pricing calculation:", { baseAmount, discount, taxes, totalAmount });
+    console.log("Pricing calculation:", { baseAmount, discount, convenienceFee, totalAmount });
 
     // Generate unique booking ID
     const timestamp = Date.now().toString(36);
@@ -147,7 +154,7 @@ router.post("/", authMiddleware, async (req, res) => {
       pricing: {
         baseAmount,
         discount,
-        taxes,
+        convenienceFee,
         totalAmount,
         currency: "INR"
       },

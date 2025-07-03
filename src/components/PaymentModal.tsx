@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { CreditCard, Shield, Clock, MapPin } from "lucide-react";
+import { CreditCard, Shield, Clock, MapPin, Calendar, Users, Timer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -38,6 +38,7 @@ interface Booking {
     taxes?: number;
     totalAmount?: number;
     duration?: number;
+    convenienceFee?: number;
   };
   amount?: number;
 }
@@ -93,7 +94,7 @@ const PaymentModal = ({
       });
   }, []);
 
-  // Memoize booking data to prevent unnecessary recalculations
+  // Enhanced dynamic amount calculation
   const bookingData = useMemo(() => {
     if (!booking) return null;
 
@@ -121,24 +122,43 @@ const PaymentModal = ({
       (ground?.location ? ground.location : "") ||
       "No address available";
 
-    const pricing = booking?.pricing || {
-      baseAmount: booking?.amount || 0,
-      discount: 0,
-      taxes: 0,
-      totalAmount: booking?.amount || 0,
-      duration: booking?.timeSlot?.duration || 1,
-    };
+    // --- Dynamic baseAmount calculation ---
+    let baseAmount = booking?.pricing?.baseAmount ?? 0;
+    let perHour = ground?.price?.perHour || 0;
+    let duration = booking?.timeSlot?.duration || 1;
+    // If price ranges exist, pick the correct perHour based on startTime
+    if (Array.isArray(ground?.price?.ranges) && ground.price.ranges.length > 0 && booking?.timeSlot?.startTime) {
+      const slot = ground.price.ranges.find(r => r.start === booking.timeSlot.startTime);
+      if (slot) {
+        perHour = slot.perHour;
+      } else {
+        perHour = ground.price.ranges[0].perHour;
+      }
+    }
+    if (!baseAmount || baseAmount === 0) {
+      baseAmount = perHour * duration;
+    }
+
+    const discount = booking?.pricing?.discount ?? 0;
+    // --- Dynamic convenienceFee and totalAmount calculation ---
+    let convenienceFee = booking?.pricing?.convenienceFee ?? 0;
+    if (!convenienceFee && baseAmount > 0) {
+      convenienceFee = Math.round((baseAmount - discount) * 0.02);
+    }
+    let totalAmount = booking?.pricing?.totalAmount ?? 0;
+    if (!totalAmount && baseAmount > 0) {
+      totalAmount = (baseAmount - discount) + convenienceFee;
+    }
 
     return {
       ground,
       firstImage,
       address,
-      pricing,
-      baseAmount: pricing.baseAmount ?? 0,
-      discount: pricing.discount ?? 0,
-      taxes: pricing.taxes ?? 0,
-      totalAmount: pricing.totalAmount ?? 0,
-      duration: pricing.duration ?? 1,
+      baseAmount,
+      discount,
+      convenienceFee,
+      totalAmount,
+      duration,
     };
   }, [booking]);
 
@@ -151,24 +171,14 @@ const PaymentModal = ({
     });
   }, []);
 
-  // Test Razorpay connection
-  const testRazorpayConnection = async () => {
-    try {
-      console.log("Testing Razorpay connection...");
-      const response = await fetch('http://localhost:3001/api/payments/test-razorpay');
-      const result = await response.json();
-      console.log("Razorpay test result:", result);
-      
-      if (result.success) {
-        toast.success("Razorpay connection successful!");
-      } else {
-        toast.error("Razorpay connection failed: " + result.message);
-      }
-    } catch (error) {
-      console.error("Razorpay test error:", error);
-      toast.error("Failed to test Razorpay connection");
-    }
-  };
+  const formatCurrency = useCallback((amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  }, []);
 
   const handlePayment = useCallback(async () => {
     if (!booking || !user || !razorpayLoaded || !bookingData) return;
@@ -193,7 +203,7 @@ const PaymentModal = ({
         throw new Error("Razorpay key missing from server response.");
       }
 
-      // Optimized Razorpay options with better performance settings
+      // Optimized Razorpay options
       const options = {
         key,
         amount: order.amount,
@@ -214,20 +224,17 @@ const PaymentModal = ({
         theme: {
           color: "#22c55e",
         },
-        // Performance optimizations
         modal: {
           ondismiss: () => {
             setIsProcessing(false);
             toast.error("Payment cancelled");
           },
-          // Reduce animation time for faster interaction
           animation: true,
           backdropclose: false,
           escape: false,
           handleback: true,
           confirm_close: true,
         },
-        // Optimize for faster loading with specific bank configurations
         config: {
           display: {
             blocks: {
@@ -258,13 +265,12 @@ const PaymentModal = ({
                 ]
               }
             },
-            sequence: ["block.banks", "block.card", "block.upi"],
+            sequence: ["block.upi", "block.card", "block.banks"],
             preferences: {
               show_default_blocks: true
             }
           }
         },
-        // Additional performance settings
         retry: {
           enabled: true,
           max_count: 3
@@ -319,166 +325,155 @@ const PaymentModal = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent aria-describedby="payment-desc" className="sm:max-w-lg">
+      <DialogContent aria-describedby="payment-desc" className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <div id="payment-desc" style={{display: 'none'}}>
           Complete your payment securely via Razorpay.
         </div>
-        <DialogHeader>
-          <DialogTitle className="flex items-center space-x-2">
-            <CreditCard className="w-5 h-5 text-cricket-green" />
-            <span>Complete Payment</span>
+        <DialogHeader className="pb-6">
+          <DialogTitle className="flex items-center space-x-3 text-xl">
+            <div className="p-2 bg-cricket-green/10 rounded-lg">
+              <CreditCard className="w-6 h-6 text-cricket-green" />
+            </div>
+            <span className="text-gray-900">Complete Payment</span>
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
-          {/* Booking Summary */}
-          <div className="space-y-4">
-            <div className="flex items-start space-x-3">
-              <img
-                src={bookingData.firstImage}
-                alt={bookingData.ground?.name || "Ground"}
-                className="w-16 h-16 rounded-lg object-cover"
-                loading="lazy"
-              />
+        <div className="space-y-8">
+          {/* Booking Summary Card */}
+          <div className="bg-gradient-to-r from-cricket-green/5 to-cricket-green/10 rounded-2xl p-6 border border-cricket-green/20">
+            <div className="flex items-start space-x-4">
+              <div className="relative">
+                <img
+                  src={bookingData.firstImage}
+                  alt={bookingData.ground?.name || "Ground"}
+                  className="w-20 h-20 rounded-xl object-cover shadow-md"
+                  loading="lazy"
+                />
+                <div className="absolute -top-2 -right-2 bg-cricket-green text-white text-xs px-2 py-1 rounded-full font-medium">
+                  {bookingData.duration}h
+                </div>
+              </div>
               <div className="flex-1">
-                <h3 className="font-semibold text-lg">
+                <h3 className="font-bold text-xl text-gray-900 mb-2">
                   {bookingData.ground?.name || "Ground"}
                 </h3>
-                <div className="flex items-center space-x-1 text-sm text-gray-600">
+                <div className="flex items-center space-x-2 text-gray-600 mb-3">
                   <MapPin className="w-4 h-4" />
-                  <span>{bookingData.address}</span>
+                  <span className="text-sm">{bookingData.address}</span>
                 </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-gray-600">Date:</span>
-                <div className="font-medium">
-                  {formatDate(booking.bookingDate)}
+                <div className="flex items-center space-x-4 text-sm">
+                  <div className="flex items-center space-x-1">
+                    <Calendar className="w-4 h-4 text-cricket-green" />
+                    <span className="font-medium">{formatDate(booking.bookingDate)}</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <Timer className="w-4 h-4 text-cricket-green" />
+                    <span className="font-medium">
+                      {booking.timeSlot?.startTime} - {booking.timeSlot?.endTime}
+                    </span>
+                  </div>
                 </div>
-              </div>
-              <div>
-                <span className="text-gray-600">Time:</span>
-                <div className="font-medium">
-                  {booking.timeSlot?.startTime
-                    ? booking.timeSlot.startTime + " - " + booking.timeSlot.endTime
-                    : "-"}
-                </div>
-              </div>
-              <div>
-                <span className="text-gray-600">Duration:</span>
-                <div className="font-medium">
-                  {booking.timeSlot?.duration || bookingData.duration || "-"} hours
-                </div>
-              </div>
-              <div>
-                <span className="text-gray-600">Players:</span>
-                <div className="font-medium">
-                  {booking.playerDetails?.playerCount}
-                </div>
-              </div>
-            </div>
-
-            {booking.playerDetails?.teamName && (
-              <div>
-                <span className="text-gray-600 text-sm">Team:</span>
-                <div className="font-medium">
-                  {booking.playerDetails.teamName}
-                </div>
-              </div>
-            )}
-
-            <div>
-              <span className="text-gray-600 text-sm">Contact Person:</span>
-              <div className="font-medium">
-                {booking.playerDetails?.contactPerson?.name} -{" "}
-                {booking.playerDetails?.contactPerson?.phone}
               </div>
             </div>
           </div>
 
-          <Separator />
+          {/* Booking Details Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Player Details */}
+            <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+              <h4 className="font-semibold text-gray-900 mb-4 flex items-center space-x-2">
+                <Users className="w-5 h-5 text-cricket-green" />
+                <span>Team Details</span>
+              </h4>
+              <div className="space-y-3">
+                {booking.playerDetails?.teamName && (
+                  <div>
+                    <span className="text-sm text-gray-600">Team Name:</span>
+                    <div className="font-medium text-gray-900">{booking.playerDetails.teamName}</div>
+                  </div>
+                )}
+                <div>
+                  <span className="text-sm text-gray-600">Players:</span>
+                  <div className="font-medium text-gray-900">{booking.playerDetails?.playerCount}</div>
+                </div>
+                <div>
+                  <span className="text-sm text-gray-600">Contact Person:</span>
+                  <div className="font-medium text-gray-900">
+                    {booking.playerDetails?.contactPerson?.name}
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    {booking.playerDetails?.contactPerson?.phone}
+                  </div>
+                </div>
+              </div>
+            </div>
 
-          {/* Pricing Breakdown */}
-          <div className="space-y-3">
-            <h4 className="font-semibold">Payment Details</h4>
-
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span>Base Amount</span>
-                <span>₹{bookingData.baseAmount}</span>
+            {/* Pricing Breakdown */}
+            <div className="bg-gray-50 border border-gray-200 rounded-xl shadow-sm p-5 space-y-3">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-700">Base Amount</span>
+                <span className="font-medium text-gray-900">₹{formatCurrency(bookingData.baseAmount)}</span>
               </div>
 
               {bookingData.discount > 0 && (
-                <div className="flex justify-between text-green-600">
+                <div className="flex justify-between text-sm text-green-600">
                   <span>Discount</span>
-                  <span>-₹{bookingData.discount}</span>
+                  <span>-₹{formatCurrency(bookingData.discount)}</span>
                 </div>
               )}
 
-              <div className="flex justify-between">
-                <span>GST (18%)</span>
-                <span>₹{bookingData.taxes}</span>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-700">Convenience Fee (2%)</span>
+                <span className="font-medium text-gray-900">₹{formatCurrency(bookingData.convenienceFee)}</span>
               </div>
 
-              <Separator />
+              <div className="border-t border-gray-200 my-2"></div>
 
-              <div className="flex justify-between font-semibold text-lg">
-                <span>Total Amount</span>
-                <span className="text-cricket-green">
-                  ₹{bookingData.totalAmount}
-                </span>
+              <div className="flex justify-between items-center">
+                <span className="font-bold text-base">Total Amount</span>
+                <span className="text-2xl font-extrabold text-cricket-green">₹{formatCurrency(bookingData.totalAmount)}</span>
               </div>
             </div>
           </div>
 
-          <Separator />
-
           {/* Security Info */}
-          <div className="bg-green-50 p-4 rounded-lg">
+          <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-5">
             <div className="flex items-start space-x-3">
-              <Shield className="w-5 h-5 text-green-600 mt-1" />
-              <div className="text-sm">
-                <div className="font-medium text-green-800">Secure Payment</div>
-                <div className="text-green-700">
-                  Your payment is protected by 256-bit SSL encryption and
-                  processed securely through Razorpay.
+              <div className="p-2 bg-green-100 rounded-lg">
+                <Shield className="w-5 h-5 text-green-600" />
+              </div>
+              <div>
+                <div className="font-semibold text-green-800 mb-1">Secure Payment</div>
+                <div className="text-sm text-green-700">
+                  Your payment is protected by 256-bit SSL encryption and processed securely through Razorpay.
+                  All major payment methods are supported.
                 </div>
               </div>
             </div>
           </div>
 
           {/* Payment Button */}
-          <div className="space-y-3">
-            <Button
-              onClick={testRazorpayConnection}
-              variant="outline"
-              className="w-full h-10 text-sm"
-            >
-              Test Razorpay Connection
-            </Button>
-            
+          <div className="space-y-4">
             <Button
               onClick={handlePayment}
-              disabled={isProcessing || !razorpayLoaded}
-              className="w-full bg-cricket-green hover:bg-cricket-green/90 h-12 text-lg"
+              disabled={isProcessing || !razorpayLoaded || bookingData.totalAmount <= 0}
+              className="w-full bg-gradient-to-r from-cricket-green to-green-600 hover:from-cricket-green/90 hover:to-green-600/90 h-14 text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-200"
             >
               {isProcessing ? (
-                <div className="flex items-center space-x-2">
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <div className="flex items-center space-x-3">
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   <span>Processing Payment...</span>
                 </div>
               ) : (
-                <div className="flex items-center space-x-2">
-                  <CreditCard className="w-5 h-5" />
-                  <span>Pay ₹{bookingData.totalAmount}</span>
+                <div className="flex items-center space-x-3">
+                  <CreditCard className="w-6 h-6" />
+                  <span>Pay {formatCurrency(bookingData.totalAmount)}</span>
                 </div>
               )}
             </Button>
 
-            <div className="flex items-center justify-center space-x-2 text-xs text-gray-500">
-              <Clock className="w-3 h-3" />
+            <div className="flex items-center justify-center space-x-2 text-sm text-gray-500">
+              <Clock className="w-4 h-4" />
               <span>This booking will expire in 15 minutes if not paid</span>
             </div>
           </div>

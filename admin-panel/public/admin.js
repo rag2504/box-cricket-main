@@ -173,6 +173,9 @@ window.editGround = async function(id) {
     document.getElementById('ownerName').value = ground.owner.name;
     document.getElementById('ownerEmail').value = ground.owner.email;
     document.getElementById('ownerContact').value = ground.owner.contact;
+    // Rating
+    document.getElementById('groundRating').value = ground.rating?.average || 0;
+    document.getElementById('groundRatingCount').value = ground.rating?.count || 0;
     // Policies
     document.getElementById('cancellationPolicy').value = ground.policies.cancellation || '';
     document.getElementById('advanceBooking').value = ground.policies.advanceBooking || 30;
@@ -226,6 +229,11 @@ groundForm.addEventListener('submit', async (e) => {
             email: document.getElementById('ownerEmail').value,
             contact: document.getElementById('ownerContact').value,
             verified: true
+        },
+        rating: {
+            average: Number(document.getElementById('groundRating').value) || 0,
+            count: Number(document.getElementById('groundRatingCount').value) || 0,
+            reviews: []
         },
         policies: {
             cancellation: document.getElementById('cancellationPolicy').value || "Free cancellation up to 24 hours before booking",
@@ -342,10 +350,19 @@ async function loadGrounds() {
             } else {
               priceHtml = '<div>No pricing info</div>';
             }
+            const ratingHtml = ground.rating?.average ? 
+                `<div class="rating-display">
+                    <span class="rating-star">★</span>
+                    <span class="rating-value">${ground.rating.average}</span>
+                    <span class="rating-count">(${ground.rating.count})</span>
+                </div>` : 
+                '<span style="color: #666;">No rating</span>';
+            
             row.innerHTML = `
                 <td>${ground.name}</td>
                 <td>${ground.location?.cityName || 'N/A'}</td>
                 <td>${priceHtml}</td>
+                <td>${ratingHtml}</td>
                 <td><span class="status ${ground.status}">${ground.status}</span></td>
                 <td>
                     <button onclick="editGround('${ground._id}')" class="btn-small">Edit</button>
