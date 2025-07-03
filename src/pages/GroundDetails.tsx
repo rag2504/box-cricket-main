@@ -302,10 +302,18 @@ const GroundDetails = () => {
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-3xl font-bold text-cricket-green">
-                    ₹{safeGround.price.perHour}
-                    <span className="text-lg text-gray-600">/hour</span>
-                  </div>
+                  {Array.isArray(safeGround.price?.ranges) && safeGround.price.ranges.length > 0 ? (
+                    <div className="space-y-2">
+                      <div className="text-lg font-bold text-cricket-green">
+                        Starting from ₹{Math.min(...safeGround.price.ranges.map(r => r.perHour))}/hr
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        View all pricing options below
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-base text-gray-500">No price slots set</div>
+                  )}
                   {safeGround.price.discount > 0 && (
                     <div className="text-sm text-green-600">
                       {safeGround.price.discount}% discount available
@@ -318,6 +326,50 @@ const GroundDetails = () => {
                 {safeGround.description}
               </p>
             </div>
+
+            {/* Pricing Section */}
+            {Array.isArray(safeGround.price?.ranges) && safeGround.price.ranges.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <span>💰</span>
+                    <span>Pricing Options</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {safeGround.price.ranges.map((range, index) => (
+                      <div key={index} className="border rounded-lg p-4 bg-gradient-to-r from-green-50 to-blue-50">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-semibold text-gray-700">
+                            {range.start} - {range.end}
+                          </span>
+                          <Badge variant="outline" className="text-cricket-green border-cricket-green">
+                            {index === 0 ? 'Peak Hours' : 'Off-Peak Hours'}
+                          </Badge>
+                        </div>
+                        <div className="text-2xl font-bold text-cricket-green">
+                          ₹{range.perHour}/hr
+                        </div>
+                        <div className="text-sm text-gray-600 mt-1">
+                          {range.start === '06:00' && range.end === '18:00' ? 'Day time slots' : 'Evening/Night slots'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {safeGround.price.discount > 0 && (
+                    <div className="mt-4 p-3 bg-green-100 rounded-lg">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-green-600">🎉</span>
+                        <span className="font-medium text-green-800">
+                          {safeGround.price.discount}% discount available on advance bookings
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Details Tabs */}
             <Tabs defaultValue="amenities" className="space-y-4">
@@ -490,10 +542,19 @@ const GroundDetails = () => {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-cricket-green">
-                    ₹{safeGround.price.perHour}
-                    <span className="text-lg text-gray-600">/hour</span>
-                  </div>
+                  {Array.isArray(safeGround.price?.ranges) && safeGround.price.ranges.length > 0 ? (
+                    <>
+                      <div className="space-y-1 mb-2">
+                        {safeGround.price.ranges.map((range, idx) => (
+                          <div key={idx} className="text-base font-semibold text-cricket-green">
+                            {range.start} - {range.end}: ₹{range.perHour}/hr
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-base text-gray-500">No price slots set</div>
+                  )}
                 </div>
 
                 <Button

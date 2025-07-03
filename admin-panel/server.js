@@ -30,13 +30,22 @@ const groundSchema = new mongoose.Schema({
     pincode: { type: String, required: true },
   },
   price: {
-    perHour: { type: Number, required: true },
+    ranges: {
+      type: [
+        {
+          start: { type: String, required: true },
+          end: { type: String, required: true },
+          perHour: { type: Number, required: true }
+        }
+      ],
+      validate: [arr => arr.length === 2, 'Exactly 2 price ranges are required.']
+    },
     currency: { type: String, default: "INR" },
     discount: { type: Number, default: 0 },
   },
   images: [
     {
-      url: { type: String, required: false },
+      url: { type: String, required: true },
       alt: { type: String, default: "" },
       isPrimary: { type: Boolean, default: false },
     },
@@ -73,7 +82,7 @@ const groundSchema = new mongoose.Schema({
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: false,
+      required: true,
     },
     name: { type: String, required: true },
     contact: { type: String, required: true },
@@ -95,9 +104,9 @@ const groundSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ["active", "inactive", "pending", "suspended"],
-    default: "active",
+    default: "pending",
   },
-  isVerified: { type: Boolean, default: true },
+  isVerified: { type: Boolean, default: false },
   totalBookings: { type: Number, default: 0 },
   verificationDocuments: {
     groundLicense: String,
@@ -111,7 +120,7 @@ const groundSchema = new mongoose.Schema({
   },
 }, { timestamps: true });
 
-const Ground = mongoose.model('Ground', groundSchema, 'grounds');
+const Ground = mongoose.model('Ground', groundSchema);
 
 // --- Location (City) Model ---
 const locationSchema = new mongoose.Schema({
@@ -180,8 +189,8 @@ app.post('/api/admin/grounds', adminAuth, async (req, res) => {
     // Set default values for required fields
     const groundData = {
       ...req.body,
-      status: "active",
-      isVerified: true,
+      status: "active", // Set to active for admin-created grounds
+      isVerified: true, // Set to verified for admin-created grounds
       // Provide a default userId for owner if not provided
       owner: {
         ...req.body.owner,
@@ -215,6 +224,7 @@ app.post('/api/admin/grounds', adminAuth, async (req, res) => {
     const ground = await Ground.create(groundData);
     res.json(ground);
   } catch (err) {
+    console.error('Error creating ground:', err);
     res.status(400).json({ message: err.message });
   }
 });

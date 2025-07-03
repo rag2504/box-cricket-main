@@ -60,7 +60,20 @@
             <!-- Pricing -->
             <div class="form-group">
               <h4>Pricing</h4>
-              <input type="number" id="groundPrice" placeholder="Price per Hour (INR)" required>
+              <div id="priceRangesContainer">
+                <div class="price-range-row" data-idx="0" style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
+                  <select class="price-range-start" required style="width: 80px;"></select>
+                  <span>to</span>
+                  <select class="price-range-end" required style="width: 80px;"></select>
+                  <input type="number" class="price-range-perHour" placeholder="Price per Hour (INR)" required style="width: 140px;">
+                </div>
+                <div class="price-range-row" data-idx="1" style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
+                  <select class="price-range-start" disabled required style="width: 80px;"></select>
+                  <span>to</span>
+                  <select class="price-range-end" disabled required style="width: 80px;"></select>
+                  <input type="number" class="price-range-perHour" placeholder="Price per Hour (INR)" required style="width: 140px;">
+                </div>
+              </div>
               <input type="number" id="groundDiscount" placeholder="Discount (%)" value="0">
             </div>
 

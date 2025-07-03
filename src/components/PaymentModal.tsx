@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { CreditCard, Shield, Clock, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -55,6 +55,23 @@ declare global {
   }
 }
 
+// Preload Razorpay script for better performance
+const preloadRazorpayScript = () => {
+  if (typeof window !== 'undefined' && !window.Razorpay) {
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.defer = true;
+    script.crossOrigin = "anonymous";
+    document.head.appendChild(script);
+    return new Promise((resolve, reject) => {
+      script.onload = () => resolve(true);
+      script.onerror = () => reject(new Error("Failed to load Razorpay"));
+    });
+  }
+  return Promise.resolve(true);
+};
+
 const PaymentModal = ({
   isOpen,
   onClose,
@@ -65,22 +82,96 @@ const PaymentModal = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
 
+  // Preload Razorpay script when component mounts
   useEffect(() => {
-    if (!window.Razorpay) {
-      const script = document.createElement("script");
-      script.src = "https://checkout.razorpay.com/v1/checkout.js";
-      script.onload = () => setRazorpayLoaded(true);
-      script.onerror = () => {
+    preloadRazorpayScript()
+      .then(() => {
+        setRazorpayLoaded(true);
+      })
+      .catch(() => {
         toast.error("Failed to load payment gateway");
-      };
-      document.body.appendChild(script);
-    } else {
-      setRazorpayLoaded(true);
-    }
+      });
   }, []);
 
-  const handlePayment = async () => {
-    if (!booking || !user || !razorpayLoaded) return;
+  // Memoize booking data to prevent unnecessary recalculations
+  const bookingData = useMemo(() => {
+    if (!booking) return null;
+
+    const ground =
+      (booking.groundId && typeof booking.groundId === "object"
+        ? booking.groundId
+        : booking.ground) || {};
+
+    let firstImage = "https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg";
+    if (
+      ground.images &&
+      Array.isArray(ground.images) &&
+      ground.images.length > 0
+    ) {
+      const imgItem = ground.images[0];
+      if (typeof imgItem === "string") {
+        firstImage = imgItem.startsWith('http') ? imgItem : "https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg";
+      } else if (imgItem && typeof imgItem === "object" && "url" in imgItem) {
+        firstImage = imgItem.url && imgItem.url.startsWith('http') ? imgItem.url : "https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg";
+      }
+    }
+
+    const address =
+      ground?.location?.address ||
+      (ground?.location ? ground.location : "") ||
+      "No address available";
+
+    const pricing = booking?.pricing || {
+      baseAmount: booking?.amount || 0,
+      discount: 0,
+      taxes: 0,
+      totalAmount: booking?.amount || 0,
+      duration: booking?.timeSlot?.duration || 1,
+    };
+
+    return {
+      ground,
+      firstImage,
+      address,
+      pricing,
+      baseAmount: pricing.baseAmount ?? 0,
+      discount: pricing.discount ?? 0,
+      taxes: pricing.taxes ?? 0,
+      totalAmount: pricing.totalAmount ?? 0,
+      duration: pricing.duration ?? 1,
+    };
+  }, [booking]);
+
+  const formatDate = useCallback((dateString: string) => {
+    return new Date(dateString).toLocaleDateString("en-IN", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  }, []);
+
+  // Test Razorpay connection
+  const testRazorpayConnection = async () => {
+    try {
+      console.log("Testing Razorpay connection...");
+      const response = await fetch('http://localhost:3001/api/payments/test-razorpay');
+      const result = await response.json();
+      console.log("Razorpay test result:", result);
+      
+      if (result.success) {
+        toast.success("Razorpay connection successful!");
+      } else {
+        toast.error("Razorpay connection failed: " + result.message);
+      }
+    } catch (error) {
+      console.error("Razorpay test error:", error);
+      toast.error("Failed to test Razorpay connection");
+    }
+  };
+
+  const handlePayment = useCallback(async () => {
+    if (!booking || !user || !razorpayLoaded || !bookingData) return;
 
     try {
       setIsProcessing(true);
@@ -90,70 +181,26 @@ const PaymentModal = ({
         bookingId: booking._id || booking.id,
       });
 
-      if (!orderResponse.success) {
-        throw new Error(orderResponse.message || "Failed to create order");
+      console.log("Order response:", orderResponse);
+
+      if (!(orderResponse as any)?.success) {
+        throw new Error((orderResponse as any)?.message || "Failed to create order");
       }
 
-      const { order, key } = orderResponse; // <-- key is returned from backend
+      const { order, key } = orderResponse as any;
 
       if (!key) {
         throw new Error("Razorpay key missing from server response.");
       }
 
-      const ground =
-        (booking.groundId && typeof booking.groundId === "object"
-          ? booking.groundId
-          : booking.ground) || {};
-
-      let firstImage = "https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg";
-      if (
-        ground.images &&
-        Array.isArray(ground.images) &&
-        ground.images.length > 0
-      ) {
-        const imgItem = ground.images[0];
-        if (typeof imgItem === "string") {
-          firstImage = imgItem.startsWith('http') ? imgItem : "https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg";
-        } else if (imgItem && typeof imgItem === "object" && "url" in imgItem) {
-          firstImage = imgItem.url && imgItem.url.startsWith('http') ? imgItem.url : "https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg";
-        }
-      }
-
-      const address =
-        ground?.location?.address ||
-        (ground?.location ? ground.location : "") ||
-        "No address available";
-
-      // Defensive pricing fallback
-      const pricing = booking?.pricing || {
-        baseAmount: booking?.amount || 0,
-        discount: 0,
-        taxes: 0,
-        totalAmount: booking?.amount || 0,
-        duration: booking?.timeSlot?.duration || 1,
-      };
-      const baseAmount = pricing.baseAmount ?? 0;
-      const discount = pricing.discount ?? 0;
-      const taxes = pricing.taxes ?? 0;
-      const totalAmount = pricing.totalAmount ?? 0;
-      const duration = pricing.duration ?? 1;
-
-      const formatDate = (dateString: string) => {
-        return new Date(dateString).toLocaleDateString("en-IN", {
-          weekday: "long",
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        });
-      };
-
+      // Optimized Razorpay options with better performance settings
       const options = {
-        key, // <-- CRITICALLY IMPORTANT: use backend-provided key
+        key,
         amount: order.amount,
         currency: order.currency,
         name: "BoxCric",
-        description: `Booking for ${ground?.name || "Ground"}`,
-        image: firstImage,
+        description: `Booking for ${bookingData.ground?.name || "Ground"}`,
+        image: bookingData.firstImage,
         order_id: order.id,
         prefill: {
           name: user.name,
@@ -162,17 +209,68 @@ const PaymentModal = ({
         },
         notes: {
           booking_id: booking.bookingId || booking._id || booking.id,
-          ground_name: ground?.name || "",
+          ground_name: bookingData.ground?.name || "",
         },
         theme: {
           color: "#22c55e",
         },
+        // Performance optimizations
         modal: {
           ondismiss: () => {
             setIsProcessing(false);
             toast.error("Payment cancelled");
           },
+          // Reduce animation time for faster interaction
+          animation: true,
+          backdropclose: false,
+          escape: false,
+          handleback: true,
+          confirm_close: true,
         },
+        // Optimize for faster loading with specific bank configurations
+        config: {
+          display: {
+            blocks: {
+              banks: {
+                name: "Pay using Net Banking",
+                instruments: [
+                  {
+                    method: "netbanking",
+                    banks: ["SBIN", "ICICI", "HDFC", "AXIS", "KOTAK", "YESBANK", "IDBI", "PNB", "BOB", "UNION"]
+                  }
+                ]
+              },
+              card: {
+                name: "Pay using Card",
+                instruments: [
+                  {
+                    method: "card",
+                    issuers: ["HDFC", "ICICI", "AXIS", "SBI"]
+                  }
+                ]
+              },
+              upi: {
+                name: "Pay using UPI",
+                instruments: [
+                  {
+                    method: "upi"
+                  }
+                ]
+              }
+            },
+            sequence: ["block.banks", "block.card", "block.upi"],
+            preferences: {
+              show_default_blocks: true
+            }
+          }
+        },
+        // Additional performance settings
+        retry: {
+          enabled: true,
+          max_count: 3
+        },
+        remember_customer: true,
+        callback_url: window.location.origin + "/payment/callback",
         handler: async (response: any) => {
           try {
             const verifyResponse = await paymentsApi.verifyPayment({
@@ -182,13 +280,13 @@ const PaymentModal = ({
               bookingId: booking._id || booking.id,
             });
 
-            if (verifyResponse.success) {
+            if ((verifyResponse as any)?.success) {
               toast.success("Payment successful! Booking confirmed.");
               onPaymentSuccess(booking);
               onClose();
             } else {
               throw new Error(
-                verifyResponse.message || "Payment verification failed",
+                (verifyResponse as any)?.message || "Payment verification failed",
               );
             }
           } catch (error: any) {
@@ -205,63 +303,19 @@ const PaymentModal = ({
         },
       };
 
-      const rzp = new window.Razorpay(options);
-      rzp.open();
+      // Use requestAnimationFrame for smoother modal opening
+      requestAnimationFrame(() => {
+        const rzp = new window.Razorpay(options);
+        rzp.open();
+      });
     } catch (error: any) {
       console.error("Payment initiation error:", error);
       toast.error(error.message || "Failed to initiate payment");
       setIsProcessing(false);
     }
-  };
+  }, [booking, user, razorpayLoaded, bookingData, onPaymentSuccess, onClose]);
 
-  if (!booking) return null;
-
-  const ground =
-    (booking.groundId && typeof booking.groundId === "object"
-      ? booking.groundId
-      : booking.ground) || {};
-
-  let firstImage = "https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg";
-  if (
-    ground.images &&
-    Array.isArray(ground.images) &&
-    ground.images.length > 0
-  ) {
-    const imgItem = ground.images[0];
-    if (typeof imgItem === "string") {
-      firstImage = imgItem.startsWith('http') ? imgItem : "https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg";
-    } else if (imgItem && typeof imgItem === "object" && "url" in imgItem) {
-      firstImage = imgItem.url && imgItem.url.startsWith('http') ? imgItem.url : "https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg";
-    }
-  }
-
-  const address =
-    ground?.location?.address ||
-    (ground?.location ? ground.location : "") ||
-    "No address available";
-
-  // Defensive pricing fallback
-  const pricing = booking?.pricing || {
-    baseAmount: booking?.amount || 0,
-    discount: 0,
-    taxes: 0,
-    totalAmount: booking?.amount || 0,
-    duration: booking?.timeSlot?.duration || 1,
-  };
-  const baseAmount = pricing.baseAmount ?? 0;
-  const discount = pricing.discount ?? 0;
-  const taxes = pricing.taxes ?? 0;
-  const totalAmount = pricing.totalAmount ?? 0;
-  const duration = pricing.duration ?? 1;
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-IN", {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-  };
+  if (!booking || !bookingData) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -281,17 +335,18 @@ const PaymentModal = ({
           <div className="space-y-4">
             <div className="flex items-start space-x-3">
               <img
-                src={firstImage}
-                alt={ground?.name || "Ground"}
+                src={bookingData.firstImage}
+                alt={bookingData.ground?.name || "Ground"}
                 className="w-16 h-16 rounded-lg object-cover"
+                loading="lazy"
               />
               <div className="flex-1">
                 <h3 className="font-semibold text-lg">
-                  {ground?.name || "Ground"}
+                  {bookingData.ground?.name || "Ground"}
                 </h3>
                 <div className="flex items-center space-x-1 text-sm text-gray-600">
                   <MapPin className="w-4 h-4" />
-                  <span>{address}</span>
+                  <span>{bookingData.address}</span>
                 </div>
               </div>
             </div>
@@ -314,7 +369,7 @@ const PaymentModal = ({
               <div>
                 <span className="text-gray-600">Duration:</span>
                 <div className="font-medium">
-                  {booking.timeSlot?.duration || duration || "-"} hours
+                  {booking.timeSlot?.duration || bookingData.duration || "-"} hours
                 </div>
               </div>
               <div>
@@ -352,19 +407,19 @@ const PaymentModal = ({
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span>Base Amount</span>
-                <span>₹{baseAmount}</span>
+                <span>₹{bookingData.baseAmount}</span>
               </div>
 
-              {discount > 0 && (
+              {bookingData.discount > 0 && (
                 <div className="flex justify-between text-green-600">
                   <span>Discount</span>
-                  <span>-₹{discount}</span>
+                  <span>-₹{bookingData.discount}</span>
                 </div>
               )}
 
               <div className="flex justify-between">
                 <span>GST (18%)</span>
-                <span>₹{taxes}</span>
+                <span>₹{bookingData.taxes}</span>
               </div>
 
               <Separator />
@@ -372,7 +427,7 @@ const PaymentModal = ({
               <div className="flex justify-between font-semibold text-lg">
                 <span>Total Amount</span>
                 <span className="text-cricket-green">
-                  ₹{totalAmount}
+                  ₹{bookingData.totalAmount}
                 </span>
               </div>
             </div>
@@ -397,6 +452,14 @@ const PaymentModal = ({
           {/* Payment Button */}
           <div className="space-y-3">
             <Button
+              onClick={testRazorpayConnection}
+              variant="outline"
+              className="w-full h-10 text-sm"
+            >
+              Test Razorpay Connection
+            </Button>
+            
+            <Button
               onClick={handlePayment}
               disabled={isProcessing || !razorpayLoaded}
               className="w-full bg-cricket-green hover:bg-cricket-green/90 h-12 text-lg"
@@ -409,7 +472,7 @@ const PaymentModal = ({
               ) : (
                 <div className="flex items-center space-x-2">
                   <CreditCard className="w-5 h-5" />
-                  <span>Pay ₹{totalAmount}</span>
+                  <span>Pay ₹{bookingData.totalAmount}</span>
                 </div>
               )}
             </Button>

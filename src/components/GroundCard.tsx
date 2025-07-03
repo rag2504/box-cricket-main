@@ -110,9 +110,15 @@ const GroundCard = ({ ground, onBook, onViewDetails }: GroundCardProps) => {
 
           {/* Price */}
           <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm rounded-lg px-2 py-1">
-            <div className="text-sm font-bold text-cricket-green">
-              ₹{ground.price.perHour}
-              <span className="text-xs text-gray-600">/hr</span>
+            <div className="text-xs font-bold text-cricket-green text-right">
+              {Array.isArray(ground.price?.ranges) && ground.price.ranges.length > 0 ? (
+                <>
+                  <div className="text-sm">Starting from</div>
+                  <div className="text-lg">₹{Math.min(...ground.price.ranges.map(r => r.perHour))}/hr</div>
+                </>
+              ) : (
+                <>No price slots set</>
+              )}
             </div>
           </div>
         </div>

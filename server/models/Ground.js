@@ -21,7 +21,16 @@ const groundSchema = new mongoose.Schema(
       pincode: { type: String, required: true },
     },
     price: {
-      perHour: { type: Number, required: true },
+      ranges: {
+        type: [
+          {
+            start: { type: String, required: true }, // e.g., "06:00"
+            end: { type: String, required: true },   // e.g., "18:00"
+            perHour: { type: Number, required: true }
+          }
+        ],
+        validate: [arr => arr.length === 2, 'Exactly 2 price ranges are required.']
+      },
       currency: { type: String, default: "INR" },
       discount: { type: Number, default: 0 },
     },

@@ -50,6 +50,7 @@ function mapMongoGroundToFallback(groundDoc, bookingsByDate = {}) {
       perHour: g.price?.perHour || 0,
       currency: g.price?.currency || 'INR',
       discount: g.price?.discount || 0,
+      ranges: g.price?.ranges || [],
     },
     images: Array.isArray(g.images) ? g.images.map(img => ({
       url: img.url || '',

@@ -8,12 +8,21 @@ import { format } from "date-fns";
 import { groundsApi, bookingsApi } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import PaymentModal from "@/components/PaymentModal";
 
 interface Ground {
   _id: string;
   name: string;
   location: { address: string };
-  price: { perHour: number };
+  price: {
+    ranges: {
+      start: string;
+      end: string;
+      perHour: number;
+    }[];
+    currency: string;
+    discount?: number;
+  };
   features: { capacity: number };
 }
 
@@ -51,12 +60,15 @@ const NewBookingModal: React.FC<NewBookingModalProps> = ({
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
   const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([]);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
-  const [selectedSlot, setSelectedSlot] = useState<string>("");
+  const [selectedStartSlotObj, setSelectedStartSlotObj] = useState<TimeSlot | null>(null);
+  const [selectedEndTime, setSelectedEndTime] = useState<string>("");
   const [playerCount, setPlayerCount] = useState("");
   const [teamName, setTeamName] = useState("");
   const [contactName, setContactName] = useState(user?.name || "");
   const [contactPhone, setContactPhone] = useState(user?.phone || "");
   const [contactEmail, setContactEmail] = useState(user?.email || "");
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [createdBooking, setCreatedBooking] = useState<any>(null);
 
   // Generate next 7 days for quick date selection
   const getQuickDates = () => {
@@ -139,57 +151,149 @@ const NewBookingModal: React.FC<NewBookingModalProps> = ({
     }
   };
 
-  const handleBook = async () => {
-    if (!ground || !selectedDate || !selectedSlot || !playerCount || !contactName || !contactPhone) return;
-    
-    try {
-      // Format the date properly
-      const formattedDate = format(selectedDate, "yyyy-MM-dd");
-      
-      // Create the booking data
-      const bookingData = {
-        groundId: ground._id,
-        bookingDate: formattedDate,
-        timeSlot: selectedSlot,
-        playerDetails: {
-          teamName: teamName || undefined,
-          playerCount: parseInt(playerCount),
-          contactPerson: {
-            name: contactName,
-            phone: contactPhone,
-            email: contactEmail || undefined,
-          },
-        },
-        requirements: "",
-      };
-
-      console.log("Sending booking data:", bookingData);
-
-      // Make the API call to create the booking
-      const response = await bookingsApi.createBooking(bookingData);
-      
-      console.log("Booking response:", response);
-      
-      if (response && response.success) {
-        toast.success("Booking created successfully!");
-        onBookingCreated(response.booking);
-        onClose();
+  // Helper to get available end times for a given start slot object
+  const getAvailableEndTimes = (startSlotObj: TimeSlot | null) => {
+    if (!startSlotObj) return [];
+    const startIdx = availableSlots.findIndex(s => s.slot === startSlotObj.slot);
+    if (startIdx === -1) return [];
+    const maxDuration = 6;
+    const endTimes: { value: string; label: string; duration: number }[] = [];
+    for (let dur = 1; dur <= maxDuration; dur++) {
+      const endIdx = startIdx + dur;
+      if (endIdx > availableSlots.length) break;
+      let allAvailable = true;
+      for (let i = startIdx; i < endIdx; i++) {
+        if (!availableSlots[i] || !availableSlots[i].isAvailable) {
+          allAvailable = false;
+          break;
+        }
+      }
+      if (allAvailable) {
+        const endSlot = availableSlots[endIdx - 1];
+        endTimes.push({
+          value: endSlot.slot.split('-')[1],
+          label: endSlot.label.split(' - ')[1],
+          duration: dur,
+        });
       } else {
-        throw new Error(response?.message || "Failed to create booking");
+        break;
+      }
+    }
+    return endTimes;
+  };
+
+  // Helper to find the price range for a given hour
+  const findRangeForHour = (hour: number, ranges: { start: string; end: string; perHour: number }[]) => {
+    for (const range of ranges) {
+      const start = parseInt(range.start.split(':')[0], 10);
+      const end = parseInt(range.end.split(':')[0], 10);
+      if (start < end) {
+        // e.g., 06:00-18:00
+        if (hour >= start && hour < end) return range;
+      } else {
+        // e.g., 18:00-06:00 (overnight)
+        if (hour >= start || hour < end) return range;
+      }
+    }
+    return null;
+  };
+
+  // Helper to calculate total price and breakdown for the selected range
+  const calculateTotalPriceAndBreakdown = () => {
+    if (!selectedStartSlotObj || !selectedEndTime || !ground) return { total: 0, breakdown: [] };
+    const startHour = parseInt(selectedStartSlotObj.slot.split(':')[0], 10);
+    const endHour = parseInt(selectedEndTime.split(':')[0], 10);
+    let total = 0;
+    let hour = startHour;
+    const breakdown: { hour: string; rate: number | string; type: string }[] = [];
+    while (hour !== endHour) {
+      const range = findRangeForHour(hour, ground.price.ranges);
+      let rate = range ? range.perHour : 'Not set';
+      let type = range ? `${range.start} - ${range.end}` : 'No Range';
+      breakdown.push({
+        hour: `${hour.toString().padStart(2, '0')}:00 - ${(hour + 1) % 24 === 0 ? '00' : (hour + 1).toString().padStart(2, '0')}:00`,
+        rate,
+        type
+      });
+      if (typeof rate === 'number') total += rate;
+      hour = (hour + 1) % 24;
+      if (hour === startHour) break;
+    }
+    return { total, breakdown };
+  };
+
+  const handleBook = async () => {
+    if (!ground || !selectedDate || !selectedStartSlotObj || !selectedEndTime || !playerCount || !contactName || !contactPhone) return;
+    if (!user) {
+      toast.error("Please login to create a booking");
+      return;
+    }
+    try {
+      const healthResponse = await fetch('http://localhost:3001/api/health');
+      if (!healthResponse.ok) throw new Error('Server not responding');
+    } catch {
+      toast.error("Server is not running. Please start the server first.");
+      return;
+    }
+    const formattedDate = format(selectedDate, "yyyy-MM-dd");
+    const bookingData = {
+      groundId: ground._id,
+      bookingDate: formattedDate,
+      startTime: selectedStartSlotObj.slot,
+      endTime: selectedEndTime,
+      playerDetails: {
+        teamName: teamName || undefined,
+        playerCount: parseInt(playerCount),
+        contactPerson: {
+          name: contactName,
+          phone: contactPhone,
+          email: contactEmail || undefined,
+        },
+      },
+      requirements: undefined,
+    };
+    try {
+      const response = await bookingsApi.createBooking(bookingData);
+      if (response && (response as any).success) {
+        toast.success("Booking created! Please complete payment to confirm.");
+        setCreatedBooking((response as any).booking);
+        setIsPaymentModalOpen(true);
+      } else {
+        throw new Error((response as any)?.message || "Failed to create booking");
       }
     } catch (error: any) {
-      console.error("Booking creation failed:", error);
-      console.error("Error details:", error.response || error);
-      const errorMessage = error.response?.data?.message || error.message || "Failed to create booking. Please try again.";
+      let errorMessage = "Failed to create booking. Please try again.";
+      if (error.response?.data?.message) errorMessage = error.response.data.message;
+      else if (error.message) errorMessage = error.message;
       toast.error(errorMessage);
     }
+  };
+
+  const handlePaymentSuccess = (booking: any) => {
+    toast.success("Payment successful! Your booking is confirmed.");
+    onBookingCreated(booking);
+    onClose();
+    setIsPaymentModalOpen(false);
+    setCreatedBooking(null);
+  };
+
+  const handlePaymentModalClose = () => {
+    setIsPaymentModalOpen(false);
+    setCreatedBooking(null);
+    // Don't close the booking modal if payment is cancelled
   };
 
   if (!ground) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl w-full rounded-3xl p-0 overflow-hidden shadow-2xl border-0 bg-gradient-to-br from-white to-gray-50">
+      <DialogContent 
+        className="max-w-2xl w-full rounded-3xl p-0 overflow-hidden shadow-2xl border-0 bg-gradient-to-br from-white to-gray-50"
+        aria-describedby="booking-modal-description"
+      >
+        <div id="booking-modal-description" style={{display: 'none'}}>
+          Book a cricket ground slot by selecting date, time, and providing contact details.
+        </div>
         <div className="relative bg-gradient-to-r from-green-600 via-green-500 to-emerald-500 px-8 py-6 text-white">
           <div className="absolute inset-0 bg-black/10"></div>
           <DialogHeader className="relative z-10">
@@ -206,7 +310,11 @@ const NewBookingModal: React.FC<NewBookingModalProps> = ({
               </span>
               <span className="flex items-center gap-1">
                 <DollarSign className="w-4 h-4" />
-                ₹{ground.price.perHour}/hour
+                {Array.isArray(ground?.price?.ranges) && ground.price.ranges.length > 0
+                  ? ground.price.ranges.map((r, i) => (
+                      <span key={i} className="mr-2">{r.start}-{r.end}: ₹{r.perHour}/hr</span>
+                    ))
+                  : 'No price ranges set'}
               </span>
               <span className="flex items-center gap-1">
                 <Users className="w-4 h-4" />
@@ -231,7 +339,8 @@ const NewBookingModal: React.FC<NewBookingModalProps> = ({
                   key={index}
                   onClick={() => {
                     setSelectedDate(date);
-                    setSelectedSlot("");
+                    setSelectedStartSlotObj(null);
+                    setSelectedEndTime("");
                   }}
                   className={`p-3 rounded-xl text-center transition-all duration-200 ${
                     selectedDate && isSameDay(date, selectedDate)
@@ -250,7 +359,7 @@ const NewBookingModal: React.FC<NewBookingModalProps> = ({
           <div className="space-y-4">
             <div className="flex items-center gap-2 mb-4">
               <Clock className="w-5 h-5 text-green-600" />
-              <h3 className="text-lg font-semibold text-gray-800">Available Times</h3>
+              <h3 className="text-lg font-semibold text-gray-800">Select Time Range</h3>
             </div>
             
             {isLoadingSlots ? (
@@ -264,22 +373,43 @@ const NewBookingModal: React.FC<NewBookingModalProps> = ({
                 <p className="text-gray-600">No available slots for this day</p>
               </div>
             ) : (
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-                {availableSlots
-                  .filter(s => s.isAvailable)
-                  .map(slot => (
-                    <button
-                      key={slot.slot}
-                      onClick={() => setSelectedSlot(slot.slot)}
-                      className={`p-3 rounded-xl text-sm font-medium transition-all duration-200 ${
-                        selectedSlot === slot.slot
-                          ? "bg-green-600 text-white shadow-lg scale-105"
-                          : "bg-white hover:bg-green-50 border border-gray-200 hover:border-green-300 text-gray-700"
-                      }`}
-                    >
-                      {slot.label.split(' - ')[0]}
-                    </button>
-                  ))}
+              <div className="flex flex-col gap-3">
+                <div className="flex gap-2">
+                  <select
+                    className="p-3 rounded-xl border border-gray-200 text-gray-700"
+                    value={selectedStartSlotObj ? selectedStartSlotObj.slot : ""}
+                    onChange={e => {
+                      const slotObj = availableSlots.find(s => s.slot === e.target.value);
+                      setSelectedStartSlotObj(slotObj || null);
+                      setSelectedEndTime("");
+                    }}
+                  >
+                    <option value="">Select Start Time</option>
+                    {availableSlots.filter(s => s.isAvailable).map(slot => (
+                      <option key={slot.slot} value={slot.slot}>
+                        {slot.label.split(' - ')[0]}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="p-3 rounded-xl border border-gray-200 text-gray-700"
+                    value={selectedEndTime}
+                    onChange={e => setSelectedEndTime(e.target.value)}
+                    disabled={!selectedStartSlotObj}
+                  >
+                    <option value="">Select End Time</option>
+                    {getAvailableEndTimes(selectedStartSlotObj).map(end => (
+                      <option key={end.value} value={end.value}>
+                        {end.label} ({end.duration} hr{end.duration > 1 ? 's' : ''})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {selectedStartSlotObj && selectedEndTime && (
+                  <div className="text-sm text-gray-600">
+                    Duration: {((parseInt(selectedEndTime.split(':')[0], 10) - parseInt(selectedStartSlotObj.slot.split(':')[0], 10) + 24) % 24)} hour(s)
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -362,7 +492,7 @@ const NewBookingModal: React.FC<NewBookingModalProps> = ({
             </div>
           </div>
 
-          {selectedDate && selectedSlot && playerCount && (
+          {selectedDate && selectedStartSlotObj && selectedEndTime && playerCount && (
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-200">
               <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
                 <Star className="w-5 h-5 text-blue-600" />
@@ -375,7 +505,7 @@ const NewBookingModal: React.FC<NewBookingModalProps> = ({
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Time:</span>
-                  <span className="font-medium">{availableSlots.find(s => s.slot === selectedSlot)?.label}</span>
+                  <span className="font-medium">{selectedStartSlotObj.slot.split('-')[0]} - {selectedEndTime}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Players:</span>
@@ -383,11 +513,33 @@ const NewBookingModal: React.FC<NewBookingModalProps> = ({
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Rate:</span>
-                  <span className="font-medium">₹{ground.price.perHour}/hour</span>
+                  <span className="font-medium">
+                    {Array.isArray(ground?.price?.ranges) && ground.price.ranges.length > 0
+                      ? ground.price.ranges.map((r, i) => (
+                          <span key={i} className="mr-2">{r.start}-{r.end}: ₹{r.perHour}/hr</span>
+                        ))
+                      : 'No price ranges set'}
+                  </span>
+                </div>
+                {/* Price breakdown */}
+                <div className="mt-2">
+                  <div className="font-semibold mb-1">Breakdown:</div>
+                  <ul className="text-xs bg-white rounded-lg p-2 border border-blue-100">
+                    {calculateTotalPriceAndBreakdown().breakdown.length === 0 ? (
+                      <li>No hours selected.</li>
+                    ) : (
+                      calculateTotalPriceAndBreakdown().breakdown.map((b, i) => (
+                        <li key={i} className="flex justify-between">
+                          <span>{b.hour} ({b.type})</span>
+                          <span>{typeof b.rate === 'number' ? `₹${b.rate}` : b.rate}</span>
+                        </li>
+                      ))
+                    )}
+                  </ul>
                 </div>
                 <div className="border-t border-blue-200 pt-3 flex justify-between text-lg font-bold">
                   <span>Total:</span>
-                  <span className="text-green-600">₹{ground.price.perHour}</span>
+                  <span className="text-green-600">₹{calculateTotalPriceAndBreakdown().total}</span>
                 </div>
               </div>
             </div>
@@ -403,16 +555,24 @@ const NewBookingModal: React.FC<NewBookingModalProps> = ({
             </Button>
             <Button
               onClick={handleBook}
-              disabled={!selectedDate || !selectedSlot || !playerCount || !contactName || !contactPhone}
+              disabled={!selectedDate || !selectedStartSlotObj || !selectedEndTime || !playerCount || !contactName || !contactPhone}
               className="flex-1 h-12 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
             >
-              {!selectedDate || !selectedSlot || !playerCount || !contactName || !contactPhone 
+              {!selectedDate || !selectedStartSlotObj || !selectedEndTime || !playerCount || !contactName || !contactPhone 
                 ? "Complete Details to Book" 
-                : "Confirm Booking"
+                : "Proceed to Payment"
               }
             </Button>
           </div>
         </div>
+
+        {/* Payment Modal */}
+        <PaymentModal
+          isOpen={isPaymentModalOpen}
+          onClose={handlePaymentModalClose}
+          booking={createdBooking}
+          onPaymentSuccess={handlePaymentSuccess}
+        />
       </DialogContent>
     </Dialog>
   );

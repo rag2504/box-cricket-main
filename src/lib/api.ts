@@ -5,7 +5,7 @@ const API_BASE_URL = "http://localhost:3001/api";
 // Create axios instance
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000,
+  timeout: 10000,
   headers: {
     "Content-Type": "application/json",
   },
@@ -109,7 +109,8 @@ export const bookingsApi = {
   createBooking: (data: {
     groundId: string;
     bookingDate: string;
-    timeSlot: string;
+    startTime: string;
+    endTime: string;
     playerDetails: {
       teamName?: string;
       playerCount: number;
@@ -120,7 +121,10 @@ export const bookingsApi = {
       };
     };
     requirements?: string;
-  }) => api.post("/bookings", data),
+  }) => api.post("/bookings", {
+    ...data,
+    timeSlot: `${data.startTime}-${data.endTime}`
+  }),
 
   getMyBookings: (params?: {
     status?: string;
