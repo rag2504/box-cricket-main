@@ -228,12 +228,8 @@ router.post("/verify-payment", authMiddleware, async (req, res) => {
       status: "completed",
       paidAt: new Date(),
     };
-    booking.status = "confirmed";
-    booking.confirmation = {
-      confirmedAt: new Date(),
-      confirmationCode: `CONF${Date.now().toString(36).toUpperCase()}`,
-      groundOwnerNotified: false
-    };
+    booking.status = "pending";
+    booking.confirmation = undefined;
 
     await booking.save();
 

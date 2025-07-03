@@ -7,6 +7,10 @@ import jwt from 'jsonwebtoken';
 import bodyParser from 'body-parser';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import Booking from '../server/models/Booking.js'; // Import Booking model from main server
+import User from '../server/models/User.js'; // Import User model for population
+import Ground from '../server/models/Ground.js'; // Import Ground model for population
+import Location from '../server/models/Location.js'; // Import Location model for location endpoints
 
 // --- Fix for __dirname in ES modules ---
 const __filename = fileURLToPath(import.meta.url);
@@ -15,123 +19,6 @@ const __dirname = dirname(__filename);
 // --- CONFIG ---
 const MONGO_URI = 'mongodb+srv://rag123456:rag123456@cluster0.qipvo.mongodb.net/boxcricket?retryWrites=true&w=majority'; // Atlas URI, using boxcricket DB
 const JWT_SECRET = 'adminpanel_secret';
-
-// --- MongoDB Model ---
-const groundSchema = new mongoose.Schema({
-  name: { type: String, required: true, trim: true },
-  description: { type: String, required: true },
-  location: {
-    address: { type: String, required: true },
-    cityId: { type: String, required: true },
-    cityName: { type: String, required: true },
-    state: { type: String, required: true },
-    latitude: { type: Number, required: true },
-    longitude: { type: Number, required: true },
-    pincode: { type: String, required: true },
-  },
-  price: {
-    ranges: {
-      type: [
-        {
-          start: { type: String, required: true },
-          end: { type: String, required: true },
-          perHour: { type: Number, required: true }
-        }
-      ],
-      validate: [arr => arr.length === 2, 'Exactly 2 price ranges are required.']
-    },
-    currency: { type: String, default: "INR" },
-    discount: { type: Number, default: 0 },
-  },
-  images: [
-    {
-      url: { type: String, required: true },
-      alt: { type: String, default: "" },
-      isPrimary: { type: Boolean, default: false },
-    },
-  ],
-  amenities: [String],
-  features: {
-    pitchType: {
-      type: String,
-      enum: ["Artificial Turf", "Synthetic", "Matting", "Concrete"],
-      required: true,
-    },
-    capacity: { type: Number, required: true },
-    lighting: { type: Boolean, default: false },
-    parking: { type: Boolean, default: false },
-    changeRoom: { type: Boolean, default: false },
-    washroom: { type: Boolean, default: false },
-    cafeteria: { type: Boolean, default: false },
-    equipment: { type: Boolean, default: false },
-  },
-  availability: {
-    timeSlots: [String],
-    blockedDates: [Date],
-    weeklySchedule: {
-      monday: { isOpen: Boolean, slots: [String] },
-      tuesday: { isOpen: Boolean, slots: [String] },
-      wednesday: { isOpen: Boolean, slots: [String] },
-      thursday: { isOpen: Boolean, slots: [String] },
-      friday: { isOpen: Boolean, slots: [String] },
-      saturday: { isOpen: Boolean, slots: [String] },
-      sunday: { isOpen: Boolean, slots: [String] },
-    },
-  },
-  owner: {
-    userId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-    },
-    name: { type: String, required: true },
-    contact: { type: String, required: true },
-    email: { type: String, required: true },
-    verified: { type: Boolean, default: false },
-  },
-  rating: {
-    average: { type: Number, default: 0, min: 0, max: 5 },
-    count: { type: Number, default: 0 },
-    reviews: [
-      {
-        userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-        rating: { type: Number, required: true, min: 1, max: 5 },
-        comment: String,
-        createdAt: { type: Date, default: Date.now },
-      },
-    ],
-  },
-  status: {
-    type: String,
-    enum: ["active", "inactive", "pending", "suspended"],
-    default: "pending",
-  },
-  isVerified: { type: Boolean, default: false },
-  totalBookings: { type: Number, default: 0 },
-  verificationDocuments: {
-    groundLicense: String,
-    ownershipProof: String,
-    identityProof: String,
-  },
-  policies: {
-    cancellation: String,
-    rules: [String],
-    advanceBooking: { type: Number, default: 30 }, // days
-  },
-}, { timestamps: true });
-
-const Ground = mongoose.model('Ground', groundSchema);
-
-// --- Location (City) Model ---
-const locationSchema = new mongoose.Schema({
-  id: { type: String, required: true, unique: true }, // cityId
-  name: { type: String, required: true },
-  state: { type: String, required: true },
-  latitude: { type: Number, required: true },
-  longitude: { type: Number, required: true },
-  popular: { type: Boolean, default: false },
-});
-const Location = mongoose.model('Location', locationSchema);
 
 // --- EXPRESS APP ---
 const app = express();
@@ -277,6 +164,48 @@ app.put('/api/admin/locations/:id', adminAuth, async (req, res) => {
 app.delete('/api/admin/locations/:id', adminAuth, async (req, res) => {
   await Location.findOneAndDelete({ id: req.params.id });
   res.json({ success: true });
+});
+
+// --- Admin: Get All Bookings (with user and ground names) ---
+app.get('/api/admin/bookings', adminAuth, async (req, res) => {
+  try {
+    const bookings = await Booking.find()
+      .sort({ createdAt: -1 })
+      .populate('userId', 'name')
+      .populate('groundId', 'name');
+    res.json({ success: true, bookings });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to fetch bookings', error: err.message });
+  }
+});
+
+// --- Admin: Update Booking Status ---
+app.patch('/api/admin/bookings/:id', adminAuth, async (req, res) => {
+  try {
+    const { status } = req.body;
+    const booking = await Booking.findByIdAndUpdate(
+      req.params.id,
+      { status },
+      { new: true }
+    )
+      .populate('userId', 'name')
+      .populate('groundId', 'name');
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+    res.json({ success: true, booking });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to update booking', error: err.message });
+  }
+});
+
+// --- Admin: Delete Booking ---
+app.delete('/api/admin/bookings/:id', adminAuth, async (req, res) => {
+  try {
+    const result = await Booking.findByIdAndDelete(req.params.id);
+    if (!result) return res.status(404).json({ success: false, message: 'Booking not found' });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to delete booking', error: err.message });
+  }
 });
 
 // --- Full Indian Cities List (copy from user panel) ---

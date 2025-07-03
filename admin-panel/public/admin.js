@@ -1,6 +1,8 @@
 // Admin Panel JavaScript
 let token = localStorage.getItem('adminToken');
 let currentSection = 'grounds';
+let bookingsCache = [];
+let selectedBookingId = null;
 
 // Check if already logged in
 if (token) {
@@ -70,6 +72,11 @@ function showSection(section) {
     // Show/hide sections
     document.getElementById('groundsSection').style.display = section === 'grounds' ? 'block' : 'none';
     document.getElementById('locationsSection').style.display = section === 'locations' ? 'block' : 'none';
+    document.getElementById('bookingsSection').style.display = section === 'bookings' ? 'block' : 'none';
+    
+    if (section === 'bookings') {
+        loadBookings();
+    }
 }
 
 // Grounds Management
@@ -529,4 +536,186 @@ async function populateCityDropdown() {
         console.error('Error loading cities:', error);
         alert('Error loading cities: ' + error.message);
     }
-} 
+}
+
+async function loadBookings() {
+  const token = localStorage.getItem('adminToken');
+  if (!token) return;
+  try {
+    const response = await fetch('/api/admin/bookings', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const data = await response.json();
+    if (!data.success) throw new Error(data.message || 'Failed to fetch bookings');
+    bookingsCache = data.bookings;
+    renderBookingsTable(bookingsCache);
+  } catch (error) {
+    console.error('Error loading bookings:', error);
+    alert('Error loading bookings: ' + error.message);
+  }
+}
+
+function renderBookingsTable(bookings) {
+  const tbody = document.getElementById('bookingsTableBody');
+  tbody.innerHTML = '';
+  bookings.forEach(booking => {
+    const userName = booking.userId && booking.userId.name ? booking.userId.name : booking.userId || '';
+    const groundName = booking.groundId && booking.groundId.name ? booking.groundId.name : booking.groundId || '';
+    let actionHtml = '';
+    if (booking.status !== 'confirmed') {
+      actionHtml = `<button class="btn-small btn-primary" data-confirm-id="${booking._id}">Confirm</button>`;
+    }
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${booking.bookingId || ''}</td>
+      <td>${userName}</td>
+      <td>${groundName}</td>
+      <td>${booking.bookingDate ? new Date(booking.bookingDate).toLocaleDateString() : ''}</td>
+      <td>${booking.timeSlot ? `${booking.timeSlot.startTime} - ${booking.timeSlot.endTime}` : ''}</td>
+      <td>${booking.status || ''}</td>
+      <td>${booking.pricing ? booking.pricing.totalAmount : ''}</td>
+      <td>${actionHtml}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+  // Attach event listeners for confirm buttons
+  tbody.querySelectorAll('button[data-confirm-id]').forEach(btn => {
+    btn.onclick = async function() {
+      const id = btn.getAttribute('data-confirm-id');
+      try {
+        const response = await fetch(`/api/admin/bookings/${id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ status: 'confirmed' })
+        });
+        const data = await response.json();
+        if (data.success) {
+          alert('Booking confirmed!');
+          loadBookings();
+        } else {
+          alert('Error confirming booking: ' + (data.message || ''));
+        }
+      } catch (err) {
+        alert('Error confirming booking: ' + err.message);
+      }
+    };
+  });
+}
+
+// Search functionality
+const bookingSearchInput = document.getElementById('bookingSearchInput');
+if (bookingSearchInput) {
+  bookingSearchInput.addEventListener('input', function() {
+    const query = this.value.toLowerCase();
+    const filtered = bookingsCache.filter(b => {
+      const userName = b.userId && b.userId.name ? b.userId.name : b.userId || '';
+      const groundName = b.groundId && b.groundId.name ? b.groundId.name : b.groundId || '';
+      return (
+        (b.bookingId && b.bookingId.toLowerCase().includes(query)) ||
+        (userName && userName.toLowerCase().includes(query)) ||
+        (groundName && groundName.toLowerCase().includes(query)) ||
+        (b.status && b.status.toLowerCase().includes(query))
+      );
+    });
+    renderBookingsTable(filtered);
+  });
+}
+
+// View Booking
+window.viewBooking = function(id) {
+  const booking = bookingsCache.find(b => b._id === id);
+  if (!booking) return;
+  selectedBookingId = id;
+  const userName = booking.userId && booking.userId.name ? booking.userId.name : booking.userId || '';
+  const groundName = booking.groundId && booking.groundId.name ? booking.groundId.name : booking.groundId || '';
+  const statusOptions = ['pending', 'confirmed', 'cancelled', 'completed', 'no_show'];
+  const details = `
+    <p><b>Booking ID:</b> ${booking.bookingId}</p>
+    <p><b>User:</b> ${userName}</p>
+    <p><b>Ground:</b> ${groundName}</p>
+    <p><b>Date:</b> ${booking.bookingDate ? new Date(booking.bookingDate).toLocaleDateString() : ''}</p>
+    <p><b>Time Slot:</b> ${booking.timeSlot ? `${booking.timeSlot.startTime} - ${booking.timeSlot.endTime}` : ''}</p>
+    <p><b>Status:</b> <select id="bookingStatusSelect">${statusOptions.map(opt => `<option value="${opt}" ${booking.status===opt?'selected':''}>${opt}</option>`).join('')}</select></p>
+    <p><b>Total Amount:</b> ${booking.pricing ? booking.pricing.totalAmount : ''}</p>
+    <p><b>Player Details:</b> ${booking.playerDetails ? JSON.stringify(booking.playerDetails) : ''}</p>
+    <p><b>Payment:</b> ${booking.payment ? JSON.stringify(booking.payment) : ''}</p>
+    <button id="editBookingBtn" class="btn-primary">Edit</button>
+    <button id="deleteBookingBtn" class="btn-danger">Delete</button>
+  `;
+  document.getElementById('bookingDetailsContent').innerHTML = details;
+  document.getElementById('bookingModal').style.display = 'block';
+  // Status change handler
+  document.getElementById('bookingStatusSelect').onchange = async function() {
+    const newStatus = this.value;
+    try {
+      const response = await fetch(`/api/admin/bookings/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+      const data = await response.json();
+      if (data.success) {
+        alert('Status updated!');
+        document.getElementById('bookingModal').style.display = 'none';
+        loadBookings();
+      } else {
+        alert('Error updating status: ' + (data.message || ''));
+      }
+    } catch (err) {
+      alert('Error updating status: ' + err.message);
+    }
+  };
+  // Attach modal button handlers
+  document.getElementById('editBookingBtn').onclick = function() {
+    alert('Edit booking feature coming soon!');
+  };
+  document.getElementById('deleteBookingBtn').onclick = function() {
+    document.getElementById('bookingModal').style.display = 'none';
+    document.getElementById('deleteBookingModal').style.display = 'block';
+  };
+};
+
+window.closeBookingModal = function() {
+  document.getElementById('bookingModal').style.display = 'none';
+};
+
+// Delete Booking
+window.showDeleteBookingModal = function(id) {
+  selectedBookingId = id;
+  document.getElementById('deleteBookingModal').style.display = 'block';
+};
+
+window.closeDeleteBookingModal = function() {
+  document.getElementById('deleteBookingModal').style.display = 'none';
+};
+
+document.getElementById('confirmDeleteBookingBtn').onclick = async function() {
+  if (!selectedBookingId) return;
+  try {
+    const response = await fetch(`/api/admin/bookings/${selectedBookingId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const data = await response.json();
+    if (data.success) {
+      alert('Booking deleted successfully!');
+      document.getElementById('deleteBookingModal').style.display = 'none';
+      loadBookings();
+    } else {
+      alert('Error deleting booking: ' + (data.message || ''));
+    }
+  } catch (err) {
+    alert('Error deleting booking: ' + err.message);
+  }
+};
+
+// Edit Booking (placeholder for now)
+document.getElementById('editBookingBtn').onclick = function() {
+  alert('Edit booking feature coming soon!');
+}; 
