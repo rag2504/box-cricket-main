@@ -9,22 +9,35 @@ const router = express.Router();
 // Utility to calculate pricing
 function getPricing(ground, timeSlot) {
   let duration = 1;
-  let perHour = ground.price?.perHour || 500;
+  let discount = ground.price?.discount || 0;
+  let baseAmount = 0;
+  let perHourDefault = ground.price?.perHour || 500;
+
   if (timeSlot && typeof timeSlot === "object" && timeSlot.duration) {
     duration = Number(timeSlot.duration) || 1;
   }
-  // If price ranges exist, pick the correct perHour based on startTime
+
+  // Parse start and end times as hours
+  const startHour = Number(timeSlot.startTime.split(":")[0]);
+  const endHour = Number(timeSlot.endTime.split(":")[0]);
+
+  // If price ranges exist, sum the correct per-hour price for each hour in the slot
   if (Array.isArray(ground.price?.ranges) && ground.price.ranges.length > 0 && timeSlot?.startTime) {
-    const slot = ground.price.ranges.find(r => r.start === timeSlot.startTime);
-    if (slot) {
-      perHour = slot.perHour;
-    } else {
-      // fallback: pick the first range
-      perHour = ground.price.ranges[0].perHour;
+    for (let h = startHour; h < endHour; h++) {
+      // Find the range this hour falls into
+      const hourStr = h.toString().padStart(2, '0') + ":00";
+      const range = ground.price.ranges.find(r => {
+        const rStart = Number(r.start.split(":")[0]);
+        const rEnd = Number(r.end.split(":")[0]);
+        return h >= rStart && h < rEnd;
+      });
+      baseAmount += range ? range.perHour : perHourDefault;
     }
+  } else {
+    // No ranges, use default perHour
+    baseAmount = perHourDefault * duration;
   }
-  const baseAmount = perHour * duration;
-  const discount = ground.price?.discount || 0;
+
   const discountedAmount = baseAmount - discount;
   const convenienceFee = Math.round(discountedAmount * 0.02); // 2% convenience fee
   const totalAmount = discountedAmount + convenienceFee;
@@ -95,7 +108,16 @@ router.post("/", authMiddleware, async (req, res) => {
     console.log("Ground found:", ground.name);
 
     // Parse time slot (format: "10:00-12:00")
-    const [startTime, endTime] = timeSlot.split("-");
+    let startTime = req.body.startTime;
+    let endTime = req.body.endTime;
+    if (!startTime || !endTime) {
+      // fallback to timeSlot string if needed
+      if (timeSlot && typeof timeSlot === "string" && timeSlot.includes("-")) {
+        [startTime, endTime] = timeSlot.split("-");
+      } else {
+        return res.status(400).json({ success: false, message: "Invalid time slot" });
+      }
+    }
     const start = new Date(`2000-01-01 ${startTime}`);
     const end = new Date(`2000-01-01 ${endTime}`);
     const duration = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
@@ -125,7 +147,7 @@ router.post("/", authMiddleware, async (req, res) => {
     */
 
     // Calculate pricing
-    const { baseAmount, discount, convenienceFee, totalAmount, duration: calcDuration } = getPricing(ground, timeSlot);
+    const { baseAmount, discount, convenienceFee, totalAmount, duration: calcDuration } = getPricing(ground, { startTime, endTime, duration });
 
     console.log("Pricing calculation:", { baseAmount, discount, convenienceFee, totalAmount });
 

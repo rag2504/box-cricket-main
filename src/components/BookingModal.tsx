@@ -100,6 +100,10 @@ const BookingModal = ({
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [isCreatingBooking, setIsCreatingBooking] = useState(false);
 
+  // Add state for start and end time
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+
   useEffect(() => {
     if (user) {
       setBookingData((prev) => ({
@@ -133,9 +137,18 @@ const BookingModal = ({
         },
         requirements: "",
       });
+      setStartTime("");
+      setEndTime("");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, selectedDate, selectedTimeSlot, user]);
+
+  // Update bookingData.timeSlot when start or end time changes
+  useEffect(() => {
+    if (startTime && endTime) {
+      setBookingData(prev => ({ ...prev, timeSlot: `${startTime}-${endTime}` }));
+    }
+  }, [startTime, endTime]);
 
   const fetchAvailability = async () => {
     if (!ground) return;
@@ -185,35 +198,31 @@ const BookingModal = ({
     if (!ground || !isAuthenticated) return;
 
     // Validation
-    if (!bookingData.timeSlot) {
-      toast.error("Please select a time slot");
+    if (!startTime || !endTime || Number(endTime.split(':')[0]) <= Number(startTime.split(':')[0])) {
+      toast.error("Please select a valid time range (end time must be after start time)");
       return;
     }
-
     if (!bookingData.playerCount || parseInt(bookingData.playerCount) < 1) {
       toast.error("Please enter valid number of players");
       return;
     }
-
     if (parseInt(bookingData.playerCount) > ground.features.capacity) {
       toast.error(
         `Maximum ${ground.features.capacity} players allowed for this ground`,
       );
       return;
     }
-
     if (!bookingData.contactPerson.name || !bookingData.contactPerson.phone) {
       toast.error("Please provide contact person details");
       return;
     }
-
     try {
       setIsCreatingBooking(true);
-
       const bookingPayload = {
         groundId: ground._id,
         bookingDate: format(bookingData.date, "yyyy-MM-dd"),
-        timeSlot: bookingData.timeSlot,
+        startTime,
+        endTime,
         playerDetails: {
           teamName: bookingData.teamName || undefined,
           playerCount: parseInt(bookingData.playerCount),
@@ -221,10 +230,8 @@ const BookingModal = ({
         },
         requirements: bookingData.requirements || undefined,
       };
-
       const response = await bookingsApi.createBooking(bookingPayload);
-
-      if (response.success) {
+      if (response && response.booking) {
         toast.success("Booking created successfully!");
         onBookingCreated(response.booking);
         onClose();
@@ -311,53 +318,44 @@ const BookingModal = ({
 
           {/* Time Slot Selection */}
           <div className="space-y-2">
-            <Label>Select Time Slot</Label>
+            <Label>Select Time Slot Range</Label>
             {isLoadingSlots ? (
               <div className="flex items-center justify-center py-8">
                 <div className="w-8 h-8 border-2 border-cricket-green border-t-transparent rounded-full animate-spin" />
               </div>
             ) : (
-              <>
-                {(() => {
-                  // Filter slots: only show future slots for today, and available ones
-                  const now = new Date();
-                  const isToday = bookingData.date && format(bookingData.date, 'yyyy-MM-dd') === format(now, 'yyyy-MM-dd');
-                  const currentHour = now.getHours();
-                  const filteredSlots = availableSlots.filter(slotObj => {
-                    const slotHour = parseInt(slotObj.slot.split(':')[0], 10);
-                    if (isToday && slotHour <= currentHour) return false; // Hide past slots for today
-                    return true;
-                  });
-                  const amSlots = filteredSlots.filter(slot => parseInt(slot.slot.split(':')[0], 10) < 12);
-                  const pmSlots = filteredSlots.filter(slot => parseInt(slot.slot.split(':')[0], 10) >= 12);
-                  if (filteredSlots.length === 0) {
-                    return <div className="text-center text-gray-500 py-4">No available slots for this day</div>;
-                  }
-                  return (
-                    <select
-                      className="w-full border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cricket-green text-base bg-white disabled:bg-gray-100 disabled:text-gray-400 shadow-sm hover:shadow-md transition-all"
-                      value={bookingData.timeSlot || ''}
-                      onChange={e => setBookingData(prev => ({ ...prev, timeSlot: e.target.value }))}
-                    >
-                      <option value="" disabled>Select a time slot</option>
-                      <optgroup label="AM">
-                        {amSlots.map(slot => (
-                          <option key={slot.slot} value={slot.slot} disabled={!slot.isAvailable}>
-                            {slot.label} {slot.isAvailable ? '' : '(Booked)'}
-                          </option>
-                        ))}
-                      </optgroup>
-                      <optgroup label="PM">
-                        {pmSlots.map(slot => (
-                          <option key={slot.slot} value={slot.slot} disabled={!slot.isAvailable}>
-                            {slot.label} {slot.isAvailable ? '' : '(Booked)'}
-                          </option>
-                        ))}
-                      </optgroup>
-                    </select>
-                  );
-                })()}
-              </>
+              <div className="flex gap-2">
+                <select
+                  className="w-1/2 border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cricket-green text-base bg-white disabled:bg-gray-100 disabled:text-gray-400 shadow-sm hover:shadow-md transition-all"
+                  value={startTime}
+                  onChange={e => setStartTime(e.target.value)}
+                >
+                  <option value="" disabled>Select start time</option>
+                  {availableSlots.map(slot => (
+                    <option key={slot.slot} value={slot.slot.split("-")[0]} disabled={!slot.isAvailable}>
+                      {slot.label.split("–")[0].trim()} {slot.isAvailable ? '' : '(Booked)'}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="w-1/2 border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cricket-green text-base bg-white disabled:bg-gray-100 disabled:text-gray-400 shadow-sm hover:shadow-md transition-all"
+                  value={endTime}
+                  onChange={e => setEndTime(e.target.value)}
+                  disabled={!startTime}
+                >
+                  <option value="" disabled>Select end time</option>
+                  {availableSlots
+                    .filter(slot => {
+                      const slotStart = Number(slot.slot.split(":")[0]);
+                      return startTime && slotStart >= Number(startTime.split(":")[0]) + 1;
+                    })
+                    .map(slot => (
+                      <option key={slot.slot} value={slot.slot.split("-")[1]} disabled={!slot.isAvailable}>
+                        {slot.slot.split("-")[1]} {slot.isAvailable ? '' : '(Booked)'}
+                      </option>
+                    ))}
+                </select>
+              </div>
             )}
           </div>
 
