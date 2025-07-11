@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Search, Filter, Menu, X, User, MapPin, LogOut } from "lucide-react";
+import { Search, Filter, Menu, X, User, MapPin, LogOut, Bell, Heart, BookOpen, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -21,6 +21,8 @@ interface NavbarProps {
   onCitySelect?: () => void;
   onSearch?: (query: string) => void;
   onFilterToggle?: () => void;
+  isDarkMode?: boolean;
+  onDarkModeToggle?: () => void;
 }
 
 const Navbar = ({
@@ -28,6 +30,8 @@ const Navbar = ({
   onCitySelect,
   onSearch,
   onFilterToggle,
+  isDarkMode,
+  onDarkModeToggle,
 }: NavbarProps) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -71,21 +75,21 @@ const Navbar = ({
 
   return (
     <>
-      <nav className="bg-white/95 backdrop-blur-md border-b border-gray-200 sticky top-0 z-50">
+      <nav className="bg-white/95 backdrop-blur-md border-b border-gray-200 sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             {/* Logo */}
-            <Link to="/" className="flex items-center space-x-2">
-              <div className="w-10 h-10 bg-gradient-cricket rounded-lg flex items-center justify-center">
-                <div className="w-6 h-6 bg-white rounded-full flex items-center justify-center">
-                  <div className="w-3 h-3 bg-cricket-green rounded-full"></div>
+            <Link to="/" className="flex items-center space-x-3 group">
+              <div className="w-12 h-12 bg-gradient-cricket rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-200">
+                <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center">
+                  <div className="w-4 h-4 bg-cricket-green rounded-md"></div>
                 </div>
               </div>
               <div>
-                <h1 className="text-xl font-bold font-display text-cricket-green">
+                <h1 className="text-2xl font-bold font-display text-cricket-green group-hover:text-cricket-green/80 transition-colors">
                   BoxCric
                 </h1>
-                <p className="text-xs text-gray-500 -mt-1">Book. Play. Win.</p>
+                <p className="text-xs text-gray-500 -mt-1 font-medium">Book. Play. Win.</p>
               </div>
             </Link>
 
@@ -95,9 +99,10 @@ const Navbar = ({
                 <Link
                   key={item.name}
                   to={item.path}
-                  className="text-gray-700 hover:text-cricket-green transition-colors duration-200 font-medium"
+                  className="text-gray-700 hover:text-cricket-green transition-colors duration-200 font-medium relative group"
                 >
                   {item.name}
+                  <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-cricket-green transition-all duration-200 group-hover:w-full"></span>
                 </Link>
               ))}
             </div>
@@ -109,10 +114,10 @@ const Navbar = ({
                 variant="outline"
                 size="sm"
                 onClick={onCitySelect}
-                className="flex items-center space-x-2"
+                className="flex items-center space-x-2 hover:bg-cricket-green/5 hover:border-cricket-green/20 transition-colors"
               >
                 <MapPin className="w-4 h-4" />
-                <span className="text-sm">{selectedCity || "Select City"}</span>
+                <span className="text-sm font-medium">{selectedCity || "Select City"}</span>
               </Button>
 
               {/* Search */}
@@ -122,7 +127,7 @@ const Navbar = ({
                   placeholder="Search grounds..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-64 pl-10 pr-4"
+                  className="w-72 pl-10 pr-4 border-gray-200 focus:border-cricket-green focus:ring-cricket-green/20"
                 />
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
               </form>
@@ -133,69 +138,118 @@ const Navbar = ({
                   variant="outline"
                   size="sm"
                   onClick={onFilterToggle}
-                  className="flex items-center space-x-2"
+                  className="flex items-center space-x-2 hover:bg-cricket-green/5 hover:border-cricket-green/20 transition-colors"
                 >
                   <Filter className="w-4 h-4" />
-                  <span className="hidden lg:inline">Filter</span>
+                  <span className="hidden lg:inline">Filters</span>
+                </Button>
+              )}
+
+              {/* Dark Mode Toggle */}
+              {onDarkModeToggle && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onDarkModeToggle}
+                  className="hover:bg-gray-100 transition-colors"
+                  aria-label="Toggle dark mode"
+                >
+                  {isDarkMode ? (
+                    <Sun className="w-4 h-4" />
+                  ) : (
+                    <Moon className="w-4 h-4" />
+                  )}
                 </Button>
               )}
 
               {/* Auth Section */}
               {isAuthenticated && user ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      className="flex items-center space-x-2 h-10"
-                    >
-                      <Avatar className="w-8 h-8">
-                        <AvatarImage src={user.avatar} />
-                        <AvatarFallback className="bg-cricket-green text-white text-xs">
-                          {getUserInitials(user.name)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="hidden lg:inline font-medium">
-                        {user.name.split(" ")[0]}
-                      </span>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    <div className="px-2 py-1.5">
-                      <p className="text-sm font-medium">{user.name}</p>
-                      <p className="text-xs text-gray-500">{user.email}</p>
-                    </div>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => navigate("/profile")}>
-                      <User className="w-4 h-4 mr-2" />
-                      My Profile
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => navigate("/profile/bookings")}
-                    >
-                      My Bookings
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => navigate("/settings")}>
-                      Settings
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleLogout}>
-                      <LogOut className="w-4 h-4 mr-2" />
-                      Sign Out
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <div className="flex items-center space-x-3">
+                  {/* Notifications */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="relative hover:bg-gray-100"
+                  >
+                    <Bell className="w-5 h-5" />
+                    <Badge className="absolute -top-1 -right-1 w-5 h-5 p-0 text-xs">3</Badge>
+                  </Button>
+
+                  {/* User Menu */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        className="flex items-center space-x-3 h-10 hover:bg-gray-100"
+                      >
+                        <Avatar className="w-8 h-8">
+                          <AvatarImage src={user.avatar} />
+                          <AvatarFallback className="bg-cricket-green text-white text-sm font-semibold">
+                            {getUserInitials(user.name)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="hidden lg:block text-left">
+                          <div className="text-sm font-medium text-gray-900">
+                            {user.name.split(" ")[0]}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {user.email}
+                          </div>
+                        </div>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-64">
+                      <div className="px-3 py-2 border-b border-gray-100">
+                        <div className="flex items-center space-x-3">
+                          <Avatar className="w-10 h-10">
+                            <AvatarImage src={user.avatar} />
+                            <AvatarFallback className="bg-cricket-green text-white">
+                              {getUserInitials(user.name)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <div className="font-medium text-gray-900">{user.name}</div>
+                            <div className="text-sm text-gray-500">{user.email}</div>
+                          </div>
+                        </div>
+                      </div>
+                      <DropdownMenuItem onClick={() => navigate("/profile")}>
+                        <User className="w-4 h-4 mr-3" />
+                        My Profile
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => navigate("/profile/bookings")}>
+                        <BookOpen className="w-4 h-4 mr-3" />
+                        My Bookings
+                      </DropdownMenuItem>
+                      <DropdownMenuItem>
+                        <Heart className="w-4 h-4 mr-3" />
+                        Favorites
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => navigate("/settings")}>
+                        Settings
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={handleLogout} className="text-red-600">
+                        <LogOut className="w-4 h-4 mr-3" />
+                        Sign Out
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               ) : (
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-3">
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => handleAuthClick("login")}
+                    className="hover:text-cricket-green transition-colors"
                   >
                     Login
                   </Button>
                   <Button
                     size="sm"
-                    className="bg-cricket-green hover:bg-cricket-green/90"
+                    className="bg-cricket-green hover:bg-cricket-green/90 text-white font-semibold px-6"
                     onClick={() => handleAuthClick("register")}
                   >
                     Sign Up
@@ -221,7 +275,7 @@ const Navbar = ({
 
           {/* Mobile Menu */}
           {isMenuOpen && (
-            <div className="md:hidden border-t border-gray-200 py-4">
+            <div className="md:hidden border-t border-gray-200 py-4 bg-white/95 backdrop-blur-md">
               <div className="space-y-4">
                 {/* Mobile Search */}
                 <form onSubmit={handleSearch} className="relative">
@@ -230,7 +284,7 @@ const Navbar = ({
                     placeholder="Search grounds..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4"
+                    className="w-full pl-10 pr-4 border-gray-200 focus:border-cricket-green"
                   />
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                 </form>
@@ -244,7 +298,7 @@ const Navbar = ({
                     className="flex-1 flex items-center justify-center space-x-2"
                   >
                     <MapPin className="w-4 h-4" />
-                    <span className="text-sm">
+                    <span className="text-sm font-medium">
                       {selectedCity || "Select City"}
                     </span>
                   </Button>
@@ -256,18 +310,18 @@ const Navbar = ({
                       className="flex items-center space-x-2"
                     >
                       <Filter className="w-4 h-4" />
-                      <span>Filter</span>
+                      <span>Filters</span>
                     </Button>
                   )}
                 </div>
 
                 {/* Mobile Navigation */}
-                <div className="space-y-2">
+                <div className="space-y-1">
                   {navItems.map((item) => (
                     <Link
                       key={item.name}
                       to={item.path}
-                      className="block px-3 py-2 text-gray-700 hover:text-cricket-green hover:bg-gray-50 rounded-md transition-colors duration-200"
+                      className="block px-3 py-2 text-gray-700 hover:text-cricket-green hover:bg-gray-50 rounded-md transition-colors duration-200 font-medium"
                       onClick={() => setIsMenuOpen(false)}
                     >
                       {item.name}
@@ -277,16 +331,16 @@ const Navbar = ({
 
                 {/* Mobile Auth */}
                 {isAuthenticated && user ? (
-                  <div className="space-y-2 pt-2 border-t border-gray-200">
+                  <div className="space-y-2 pt-4 border-t border-gray-200">
                     <div className="flex items-center space-x-3 px-3 py-2">
-                      <Avatar className="w-10 h-10">
+                      <Avatar className="w-12 h-12">
                         <AvatarImage src={user.avatar} />
-                        <AvatarFallback className="bg-cricket-green text-white">
+                        <AvatarFallback className="bg-cricket-green text-white font-semibold">
                           {getUserInitials(user.name)}
                         </AvatarFallback>
                       </Avatar>
                       <div>
-                        <div className="font-medium">{user.name}</div>
+                        <div className="font-semibold text-gray-900">{user.name}</div>
                         <div className="text-sm text-gray-500">
                           {user.email}
                         </div>
@@ -297,6 +351,7 @@ const Navbar = ({
                       className="block px-3 py-2 text-gray-700 hover:text-cricket-green hover:bg-gray-50 rounded-md transition-colors duration-200"
                       onClick={() => setIsMenuOpen(false)}
                     >
+                      <User className="w-4 h-4 inline mr-2" />
                       My Profile
                     </Link>
                     <Link
@@ -304,6 +359,7 @@ const Navbar = ({
                       className="block px-3 py-2 text-gray-700 hover:text-cricket-green hover:bg-gray-50 rounded-md transition-colors duration-200"
                       onClick={() => setIsMenuOpen(false)}
                     >
+                      <BookOpen className="w-4 h-4 inline mr-2" />
                       My Bookings
                     </Link>
                     <Link
@@ -318,13 +374,14 @@ const Navbar = ({
                         handleLogout();
                         setIsMenuOpen(false);
                       }}
-                      className="block w-full text-left px-3 py-2 text-gray-700 hover:text-cricket-green hover:bg-gray-50 rounded-md transition-colors duration-200"
+                      className="block w-full text-left px-3 py-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors duration-200"
                     >
+                      <LogOut className="w-4 h-4 inline mr-2" />
                       Sign Out
                     </button>
                   </div>
                 ) : (
-                  <div className="flex space-x-2 pt-2 border-t border-gray-200">
+                  <div className="flex space-x-2 pt-4 border-t border-gray-200">
                     <Button
                       variant="outline"
                       className="flex-1"
@@ -336,7 +393,7 @@ const Navbar = ({
                       Login
                     </Button>
                     <Button
-                      className="flex-1 bg-cricket-green hover:bg-cricket-green/90"
+                      className="flex-1 bg-cricket-green hover:bg-cricket-green/90 text-white font-semibold"
                       onClick={() => {
                         handleAuthClick("register");
                         setIsMenuOpen(false);

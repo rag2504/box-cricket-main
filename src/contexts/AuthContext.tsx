@@ -8,11 +8,21 @@ import {
 } from "@/lib/api";
 import { toast } from "sonner";
 
+// API Response types
+interface AuthResponse {
+  success: boolean;
+  message?: string;
+  token?: string;
+  user?: User;
+  tempToken?: string;
+}
+
 interface User {
   id: string;
   name: string;
   email: string;
   phone: string;
+  avatar?: string;
   isVerified: boolean;
   location?: {
     cityId: string;
@@ -85,11 +95,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       setIsLoading(true);
       const response = await authApi.login({ emailOrPhone, password });
-
-      if (response.success) {
-        setAuthToken(response.token);
-        setUser(response.user);
-        setUserState(response.user);
+      const data: AuthResponse = response.data || response;
+      if (data.success) {
+        setAuthToken(data.token!);
+        setUser(data.user!);
+        setUserState(data.user!);
         toast.success("Login successful!");
       }
     } catch (error: any) {
@@ -104,11 +114,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       setIsLoading(true);
       const response = await authApi.verifyLoginOTP({ email, otp });
-
-      if (response.success) {
-        setAuthToken(response.token);
-        setUser(response.user);
-        setUserState(response.user);
+      const data: AuthResponse = response.data || response;
+      if (data.success) {
+        setAuthToken(data.token!);
+        setUser(data.user!);
+        setUserState(data.user!);
         toast.success("Login successful!");
       }
     } catch (error: any) {
@@ -128,13 +138,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       setIsLoading(true);
       const response = await authApi.register(data);
-
-      if (response.success) {
+      const resData: AuthResponse = response.data || response;
+      if (resData.success) {
         toast.success("OTP sent to your email!");
-        return { tempToken: response.tempToken };
+        return { tempToken: resData.tempToken };
       }
-
-      throw new Error(response.message);
+      throw new Error(resData.message);
     } catch (error: any) {
       toast.error(error.message || "Registration failed");
       throw error;
@@ -155,11 +164,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         otp,
         tempToken,
       });
-
-      if (response.success) {
-        setAuthToken(response.token);
-        setUser(response.user);
-        setUserState(response.user);
+      const data: AuthResponse = response.data || response;
+      if (data.success) {
+        setAuthToken(data.token!);
+        setUser(data.user!);
+        setUserState(data.user!);
         toast.success("Registration successful!");
       }
     } catch (error: any) {
@@ -174,8 +183,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       setIsLoading(true);
       const response = await authApi.requestLoginOTP({ email });
-
-      if (response.success) {
+      const data: AuthResponse = response.data || response;
+      if (data.success) {
         toast.success("OTP sent to your email!");
       }
     } catch (error: any) {

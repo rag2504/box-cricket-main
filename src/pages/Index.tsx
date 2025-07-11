@@ -1,8 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
-import { MapPin, Zap, Star, Clock, Sparkles } from "lucide-react";
+import { MapPin, Zap, Star, Clock, Sparkles, Search, Play, Trophy, Users, Shield, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Navbar from "@/components/Navbar";
+
+
+import Footer from "@/components/Footer";
 import LocationSelector from "@/components/LocationSelector";
 import GroundCard from "@/components/GroundCard";
 import FilterPanel from "@/components/FilterPanel";
@@ -18,6 +21,45 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 
+// Demo data for testimonials
+const testimonials = [
+  {
+    name: "Amit Sharma",
+    city: "Mumbai",
+    photo: "https://randomuser.me/api/portraits/men/32.jpg",
+    review: "Booking a ground was super easy and the facilities were top-notch! Highly recommend BoxCric to all cricket lovers.",
+  },
+  {
+    name: "Priya Verma",
+    city: "Delhi",
+    photo: "https://randomuser.me/api/portraits/women/44.jpg",
+    review: "Loved the instant confirmation and the variety of grounds available. The support team was very helpful!",
+  },
+  {
+    name: "Rahul Singh",
+    city: "Bangalore",
+    photo: "https://randomuser.me/api/portraits/men/65.jpg",
+    review: "The best platform for booking cricket grounds. The reviews and ratings helped me pick the perfect pitch.",
+  },
+  {
+    name: "Sneha Patel",
+    city: "Ahmedabad",
+    photo: "https://randomuser.me/api/portraits/women/68.jpg",
+    review: "Great experience! The booking process was smooth and the ground was exactly as described.",
+  },
+];
+
+// Demo data for recent bookings
+const recentBookings = [
+  "Amit booked Marine Drive Arena, Mumbai",
+  "Priya booked Andheri Sports Complex, Mumbai",
+  "Rahul booked Powai Cricket Club, Mumbai",
+  "Sneha booked Delhi Cricket Stadium, Delhi",
+  "Vikram booked Eden Gardens, Kolkata",
+  "Anjali booked Chinnaswamy Stadium, Bangalore",
+  "Rohit booked Rajiv Gandhi Stadium, Hyderabad",
+];
+
 const Index = () => {
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -29,6 +71,18 @@ const Index = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [grounds, setGrounds] = useState<any[]>([]);
   const [isLoadingGrounds, setIsLoadingGrounds] = useState(false);
+  const [heroStats, setHeroStats] = useState({ grounds: 0, players: 0, bookings: 0 });
+
+  // State for testimonials carousel
+  const [testimonialIndex, setTestimonialIndex] = useState(0);
+
+  // Auto-advance testimonials every 6 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTestimonialIndex((prev) => (prev + 1) % testimonials.length);
+    }, 6000);
+    return () => clearInterval(interval);
+  }, []);
 
   const defaultFilters: FilterOptions = {
     priceRange: [500, 2000],
@@ -42,6 +96,51 @@ const Index = () => {
   };
 
   const [filters, setFilters] = useState<FilterOptions>(defaultFilters);
+
+  // Animated stats counter
+  useEffect(() => {
+    const animateStats = () => {
+      const duration = 2000;
+      const steps = 60;
+      const stepDuration = duration / steps;
+      
+      let currentStep = 0;
+      const interval = setInterval(() => {
+        currentStep++;
+        const progress = currentStep / steps;
+        
+        setHeroStats({
+          grounds: Math.floor(500 * progress),
+          players: Math.floor(50000 * progress),
+          bookings: Math.floor(10000 * progress),
+        });
+        
+        if (currentStep >= steps) {
+          clearInterval(interval);
+        }
+      }, stepDuration);
+    };
+
+    animateStats();
+  }, []);
+
+  // Add loading state for initial page load
+  const [isPageLoading, setIsPageLoading] = useState(true);
+  const [isDarkMode, setIsDarkMode] = useState(false);
+
+  useEffect(() => {
+    // Simulate initial page load
+    const timer = setTimeout(() => {
+      setIsPageLoading(false);
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Dark mode toggle
+  const toggleDarkMode = () => {
+    setIsDarkMode(!isDarkMode);
+    document.documentElement.classList.toggle('dark');
+  };
 
   // Test API connection on mount
   useEffect(() => {
@@ -67,6 +166,26 @@ const Index = () => {
       return () => clearTimeout(timer);
     }
   }, [selectedCity]);
+
+  // Add smooth scroll behavior
+  useEffect(() => {
+    const smoothScroll = (e: any) => {
+      if (e.target.tagName === 'A' && e.target.getAttribute('href')?.startsWith('#')) {
+        e.preventDefault();
+        const targetId = e.target.getAttribute('href').substring(1);
+        const targetElement = document.getElementById(targetId);
+        if (targetElement) {
+          targetElement.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+          });
+        }
+      }
+    };
+
+    document.addEventListener('click', smoothScroll);
+    return () => document.removeEventListener('click', smoothScroll);
+  }, []);
 
   // Fetch grounds when city or filters change
   useEffect(() => {
@@ -136,12 +255,12 @@ const Index = () => {
       }
 
       console.log("📡 API Request params:", params);
-      const response = await groundsApi.getGrounds(params);
+      const response = await groundsApi.getGrounds(params) as any;
       console.log("📥 API Response:", response);
 
       if (response.success) {
-        console.log("✅ Found grounds:", response.grounds.length);
-        setGrounds(response.grounds);
+        console.log("✅ Found grounds:", response.grounds?.length);
+        setGrounds(response.grounds || []);
       } else {
         console.log("❌ API returned error:", response.message);
         setGrounds([]);
@@ -203,88 +322,203 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-grass-light via-white to-sky-blue/10">
+      {/* Page Loading Overlay */}
+      {isPageLoading && (
+        <div className="fixed inset-0 bg-white z-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-cricket-green border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Loading BoxCric</h2>
+            <p className="text-gray-600">Finding the best cricket grounds for you...</p>
+          </div>
+        </div>
+      )}
+
       <Navbar
         selectedCity={selectedCity?.name}
         onCitySelect={() => setIsLocationSelectorOpen(true)}
         onSearch={handleSearch}
         onFilterToggle={() => setIsFilterPanelOpen(true)}
+        isDarkMode={isDarkMode}
+        onDarkModeToggle={toggleDarkMode}
       />
 
-      {/* Hero Section */}
-      <section className="relative py-16 px-4">
-        <div className="max-w-7xl mx-auto text-center">
-          <div className="relative">
+      {/* Enhanced Hero Section */}
+      <section className="relative py-20 px-2 sm:px-4 overflow-hidden">
+        {/* Dynamic Background */}
+        <div className="absolute inset-0 bg-gradient-to-br from-cricket-green/20 via-transparent to-sky-blue/20">
+          <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2260%22%20height%3D%2260%22%20viewBox%3D%220%200%2060%2060%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cg%20fill%3D%22none%22%20fill-rule%3D%22evenodd%22%3E%3Cg%20fill%3D%22%2322c55e%22%20fill-opacity%3D%220.1%22%3E%3Ccircle%20cx%3D%2230%22%20cy%3D%2230%22%20r%3D%222%22/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')] opacity-30"></div>
+        </div>
+        
+        {/* Animated Cricket Elements */}
+        <div className="absolute top-10 left-2 animate-float hidden sm:block">
+          <div className="w-12 h-12 bg-cricket-green/20 rounded-full flex items-center justify-center">
+            <span className="text-xl">🏏</span>
+          </div>
+        </div>
+        <div className="absolute top-32 right-4 animate-float hidden sm:block" style={{ animationDelay: '1s' }}>
+          <div className="w-10 h-10 bg-cricket-yellow/20 rounded-full flex items-center justify-center">
+            <span className="text-lg">⚾</span>
+          </div>
+        </div>
+        <div className="absolute bottom-10 left-1/4 animate-float hidden sm:block" style={{ animationDelay: '2s' }}>
+          <div className="w-8 h-8 bg-sky-blue/20 rounded-full flex items-center justify-center">
+            <span className="text-base">🏟️</span>
+          </div>
+        </div>
+
+        <div className="max-w-7xl mx-auto text-center relative z-10">
+          {/* Main Heading */}
+          <div className="relative mb-6 sm:mb-8">
             <div className="absolute inset-0 bg-gradient-cricket opacity-20 blur-3xl rounded-full"></div>
-            <h1 className="relative text-4xl md:text-6xl font-bold font-display text-gray-900 mb-6">
+            <h1 className="relative text-3xl xs:text-4xl sm:text-5xl md:text-7xl font-bold font-display text-gray-900 mb-4 sm:mb-6 leading-tight">
               Book Your Perfect{" "}
-              <span className="text-transparent bg-gradient-to-r from-cricket-green to-sky-blue bg-clip-text">
+              <span className="text-transparent bg-gradient-to-r from-cricket-green via-cricket-yellow to-sky-blue bg-clip-text animate-pulse">
                 Cricket Ground
               </span>
             </h1>
+            <p className="text-base xs:text-lg sm:text-xl md:text-2xl text-gray-600 mb-6 sm:mb-8 max-w-xl sm:max-w-3xl mx-auto leading-relaxed">
+              Discover amazing box cricket grounds near you. From premium facilities to budget-friendly options, 
+              find the perfect pitch for your game in just a few clicks.
+            </p>
           </div>
-          <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-            Discover amazing box cricket grounds near you. From premium
-            facilities to budget-friendly options, find the perfect pitch for
-            your game.
-          </p>
 
-          {!selectedCity && (
-            <Button
-              size="lg"
-              className="bg-cricket-green hover:bg-cricket-green/90 text-lg px-8 py-3"
-              onClick={() => setIsLocationSelectorOpen(true)}
-            >
-              <MapPin className="w-5 h-5 mr-2" />
-              Choose Your Location
-            </Button>
-          )}
+          {/* Enhanced Search Bar */}
+          <div className="max-w-full sm:max-w-2xl mx-auto mb-8 sm:mb-12 px-1">
+            <div className="relative bg-white/90 backdrop-blur-sm rounded-xl sm:rounded-2xl shadow-2xl p-1 sm:p-2 border border-gray-200/50">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <Input
+                    type="text"
+                    placeholder="Search for cricket grounds..."
+                    className="pl-12 pr-4 py-3 sm:py-4 text-base sm:text-lg border-0 bg-transparent focus:ring-0"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+                <Button
+                  size="lg"
+                  className="bg-cricket-green hover:bg-cricket-green/90 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl font-semibold text-base sm:text-lg"
+                  onClick={() => setIsLocationSelectorOpen(true)}
+                >
+                  <MapPin className="w-5 h-5 mr-2" />
+                  {selectedCity?.name || "Choose Location"}
+                </Button>
+              </div>
+            </div>
+          </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-12 max-w-4xl mx-auto">
-            <Card className="border-0 bg-white/80 backdrop-blur-sm">
-              <CardContent className="p-6 text-center">
-                <div className="w-12 h-12 bg-cricket-green/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <Zap className="w-6 h-6 text-cricket-green" />
+          {/* Animated Stats */}
+          <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-8 mb-8 sm:mb-12 max-w-4xl mx-auto">
+            <Card className="border-0 bg-white/80 backdrop-blur-sm hover:bg-white/90 transition-all duration-300 hover:scale-105">
+              <CardContent className="p-4 sm:p-6 text-center">
+                <div className="w-12 h-12 sm:w-16 sm:h-16 bg-cricket-green/10 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
+                  <Trophy className="w-7 h-7 sm:w-8 sm:h-8 text-cricket-green" />
                 </div>
-                <h3 className="text-2xl font-bold text-gray-900">500+</h3>
-                <p className="text-gray-600">Cricket Grounds</p>
+                <h3 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1 sm:mb-2">{heroStats.grounds}+</h3>
+                <p className="text-gray-600 font-medium text-xs sm:text-base">Premium Cricket Grounds</p>
               </CardContent>
             </Card>
-            <Card className="border-0 bg-white/80 backdrop-blur-sm">
-              <CardContent className="p-6 text-center">
-                <div className="w-12 h-12 bg-cricket-yellow/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <Star className="w-6 h-6 text-cricket-yellow" />
+            <Card className="border-0 bg-white/80 backdrop-blur-sm hover:bg-white/90 transition-all duration-300 hover:scale-105">
+              <CardContent className="p-4 sm:p-6 text-center">
+                <div className="w-12 h-12 sm:w-16 sm:h-16 bg-cricket-yellow/10 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
+                  <Users className="w-7 h-7 sm:w-8 sm:h-8 text-cricket-yellow" />
                 </div>
-                <h3 className="text-2xl font-bold text-gray-900">50k+</h3>
-                <p className="text-gray-600">Happy Players</p>
+                <h3 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1 sm:mb-2">{heroStats.players}+</h3>
+                <p className="text-gray-600 font-medium text-xs sm:text-base">Happy Players</p>
               </CardContent>
             </Card>
-            <Card className="border-0 bg-white/80 backdrop-blur-sm">
-              <CardContent className="p-6 text-center">
-                <div className="w-12 h-12 bg-sky-blue/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <Clock className="w-6 h-6 text-sky-blue" />
+            <Card className="border-0 bg-white/80 backdrop-blur-sm hover:bg-white/90 transition-all duration-300 hover:scale-105">
+              <CardContent className="p-4 sm:p-6 text-center">
+                <div className="w-12 h-12 sm:w-16 sm:h-16 bg-sky-blue/10 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
+                  <Play className="w-7 h-7 sm:w-8 sm:h-8 text-sky-blue" />
                 </div>
-                <h3 className="text-2xl font-bold text-gray-900">24/7</h3>
-                <p className="text-gray-600">Booking Support</p>
+                <h3 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1 sm:mb-2">{heroStats.bookings}+</h3>
+                <p className="text-gray-600 font-medium text-xs sm:text-base">Successful Bookings</p>
               </CardContent>
             </Card>
+          </div>
+
+          {/* Trust Indicators */}
+          <div className="flex flex-wrap justify-center items-center gap-x-4 gap-y-2 text-xs sm:text-sm text-gray-500 mb-2 sm:mb-0">
+            <div className="flex items-center space-x-2">
+              <Shield className="w-4 h-4 text-cricket-green" />
+              <span>100% Secure Booking</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Clock className="w-4 h-4 text-cricket-green" />
+              <span>Instant Confirmation</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Star className="w-4 h-4 text-cricket-green" />
+              <span>Verified Grounds</span>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Location Prompt */}
-      {!selectedCity && (
-        <section className="py-8 px-4 bg-white/50">
-          <div className="max-w-4xl mx-auto text-center">
-            <div className="inline-flex items-center space-x-2 bg-cricket-green/5 border border-cricket-green/20 rounded-full px-6 py-3">
-              <MapPin className="w-5 h-5 text-cricket-green animate-pulse" />
-              <span className="text-cricket-green font-medium">
-                Select your city to discover nearby cricket grounds
-              </span>
+      {/* Recent Bookings Ticker */}
+      <div className="w-full bg-white/80 border-y border-gray-100 py-2 overflow-hidden">
+        <div className="flex items-center space-x-2 max-w-7xl mx-auto px-2 animate-marquee whitespace-nowrap text-sm text-gray-700 font-medium">
+          <Sparkles className="w-4 h-4 text-cricket-green mr-2" />
+          {recentBookings.map((booking, i) => (
+            <span key={i} className="mx-4 inline-block hover:text-cricket-green transition-colors cursor-pointer">
+              {booking}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Testimonials Section */}
+      <section className="py-10 sm:py-16 px-2 sm:px-4 bg-gradient-to-br from-white to-grass-light">
+        <div className="max-w-4xl mx-auto text-center mb-8">
+          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">What Our Users Say</h2>
+          <p className="text-gray-600 text-base sm:text-lg">Real stories from happy BoxCric players</p>
+        </div>
+        <div className="relative max-w-3xl mx-auto">
+          <div className="flex items-center justify-center">
+            <button
+              className="p-2 rounded-full bg-gray-100 hover:bg-cricket-green/10 text-cricket-green transition-colors mr-2"
+              onClick={() => setTestimonialIndex((testimonialIndex - 1 + testimonials.length) % testimonials.length)}
+              aria-label="Previous testimonial"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+            <div className="flex-1">
+              <div className="bg-white/90 rounded-2xl shadow-lg px-4 sm:px-8 py-6 sm:py-8 flex flex-col items-center">
+                <img
+                  src={testimonials[testimonialIndex].photo}
+                  alt={testimonials[testimonialIndex].name}
+                  className="w-16 h-16 rounded-full object-cover border-4 border-cricket-green mb-3"
+                />
+                <p className="text-gray-800 text-base sm:text-lg font-medium mb-3">"{testimonials[testimonialIndex].review}"</p>
+                <div className="flex items-center space-x-2">
+                  <span className="font-semibold text-cricket-green">{testimonials[testimonialIndex].name}</span>
+                  <span className="text-gray-400">|</span>
+                  <span className="text-gray-500 text-sm">{testimonials[testimonialIndex].city}</span>
+                </div>
+              </div>
             </div>
+            <button
+              className="p-2 rounded-full bg-gray-100 hover:bg-cricket-green/10 text-cricket-green transition-colors ml-2"
+              onClick={() => setTestimonialIndex((testimonialIndex + 1) % testimonials.length)}
+              aria-label="Next testimonial"
+            >
+              <ChevronRight className="w-6 h-6" />
+            </button>
           </div>
-        </section>
-      )}
+          <div className="flex justify-center mt-4 space-x-2">
+            {testimonials.map((_, i) => (
+              <button
+                key={i}
+                className={`w-2.5 h-2.5 rounded-full ${i === testimonialIndex ? 'bg-cricket-green' : 'bg-gray-300'} transition-colors`}
+                onClick={() => setTestimonialIndex(i)}
+                aria-label={`Go to testimonial ${i + 1}`}
+              />
+            ))}
+          </div>
+        </div>
+      </section>
 
       {/* Grounds Listing */}
       {selectedCity && (
@@ -293,11 +527,11 @@ const Index = () => {
             {/* Section Header */}
             <div className="flex items-center justify-between mb-8">
               <div>
-                <h2 className="text-2xl font-bold text-gray-900">
+                <h2 className="text-3xl font-bold text-gray-900 mb-2">
                   Cricket Grounds in {selectedCity.name}
                 </h2>
-                <p className="text-gray-600 mt-1">
-                  {displayGrounds.length} grounds available
+                <p className="text-gray-600">
+                  {displayGrounds.length} amazing grounds available for booking
                 </p>
               </div>
               <div className="flex items-center space-x-2">
@@ -433,56 +667,372 @@ const Index = () => {
         </section>
       )}
 
-      {/* How it Works */}
-      <section className="py-16 px-4 bg-white/50">
-        <div className="max-w-6xl mx-auto">
+      {/* How It Works */}
+      <section className="py-16 bg-white">
+        <div className="container mx-auto px-4">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold text-gray-900 mb-4">
-              How BoxCric Works
+              How It Works
             </h2>
             <p className="text-gray-600 max-w-2xl mx-auto">
-              Booking your perfect cricket ground is just a few clicks away
+              Book your cricket ground in just 3 simple steps
             </p>
           </div>
-
+          
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="text-center">
-              <div className="w-16 h-16 bg-cricket-green/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <MapPin className="w-8 h-8 text-cricket-green" />
+              <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                <span className="text-white font-bold text-xl">1</span>
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                1. Choose Location
-              </h3>
+              <h3 className="text-xl font-semibold text-gray-900 mb-4">Search & Select</h3>
               <p className="text-gray-600">
-                Select your city or let us auto-detect your location to find
-                nearby cricket grounds.
+                Find cricket grounds near you, filter by location, price, and amenities to find the perfect match.
               </p>
             </div>
-
+            
             <div className="text-center">
-              <div className="w-16 h-16 bg-cricket-yellow/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Star className="w-8 h-8 text-cricket-yellow" />
+              <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                <span className="text-white font-bold text-xl">2</span>
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                2. Find Perfect Ground
-              </h3>
+              <h3 className="text-xl font-semibold text-gray-900 mb-4">Choose Time Slot</h3>
               <p className="text-gray-600">
-                Browse through verified grounds, check amenities, ratings, and
-                prices to find your ideal match.
+                Pick your preferred date and time slot from the available options. Real-time availability updates.
               </p>
             </div>
-
+            
             <div className="text-center">
-              <div className="w-16 h-16 bg-sky-blue/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Clock className="w-8 h-8 text-sky-blue" />
+              <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                <span className="text-white font-bold text-xl">3</span>
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                3. Book & Play
-              </h3>
+              <h3 className="text-xl font-semibold text-gray-900 mb-4">Book & Play</h3>
               <p className="text-gray-600">
-                Select your preferred time slot, make secure payment, and get
-                ready for an amazing cricket experience.
+                Complete your payment securely and get instant confirmation. Show up and enjoy your game!
               </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Why Choose Us */}
+      <section className="py-16 bg-gradient-to-r from-green-50 to-blue-50">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">
+              Why Choose BoxCric?
+            </h2>
+            <p className="text-gray-600 max-w-2xl mx-auto">
+              We're committed to making cricket ground booking simple, secure, and enjoyable
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="bg-white rounded-xl p-6 shadow-lg text-center">
+              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Instant Booking</h3>
+              <p className="text-gray-600 text-sm">Book your slot instantly with real-time availability</p>
+            </div>
+            
+            <div className="bg-white rounded-xl p-6 shadow-lg text-center">
+              <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Verified Grounds</h3>
+              <p className="text-gray-600 text-sm">All grounds are verified for quality and safety</p>
+            </div>
+            
+            <div className="bg-white rounded-xl p-6 shadow-lg text-center">
+              <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Secure Payments</h3>
+              <p className="text-gray-600 text-sm">Multiple secure payment options available</p>
+            </div>
+            
+            <div className="bg-white rounded-xl p-6 shadow-lg text-center">
+              <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192L5.636 18.364M12 2.25a9.75 9.75 0 100 19.5 9.75 9.75 0 000-19.5z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">24/7 Support</h3>
+              <p className="text-gray-600 text-sm">Round-the-clock customer support available</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* How to Play Section */}
+      <section className="py-16 bg-gradient-to-br from-gray-50 to-white">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">
+              How to Play Cricket
+            </h2>
+            <p className="text-gray-600 max-w-2xl mx-auto">
+              Learn the basics of cricket and how to play on BoxCric grounds
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="bg-white rounded-xl p-6 shadow-lg hover:shadow-xl transition-all duration-300">
+              <div className="w-12 h-12 bg-cricket-green/10 rounded-full flex items-center justify-center mb-4">
+                <span className="text-2xl">🏏</span>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                What is Cricket?
+              </h3>
+              <p className="text-gray-600 text-sm leading-relaxed">
+                Cricket is a bat-and-ball game played between two teams of 11 players. The objective is to score runs and dismiss the opposing team's players.
+              </p>
+            </div>
+            
+            <div className="bg-white rounded-xl p-6 shadow-lg hover:shadow-xl transition-all duration-300">
+              <div className="w-12 h-12 bg-cricket-green/10 rounded-full flex items-center justify-center mb-4">
+                <span className="text-2xl">⚾</span>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                Cricket Equipment
+              </h3>
+              <p className="text-gray-600 text-sm leading-relaxed">
+                Main equipment includes bat, ball, stumps, pads, gloves, and helmets. Most grounds provide basic equipment like stumps and balls.
+              </p>
+            </div>
+            
+            <div className="bg-white rounded-xl p-6 shadow-lg hover:shadow-xl transition-all duration-300">
+              <div className="w-12 h-12 bg-cricket-green/10 rounded-full flex items-center justify-center mb-4">
+                <span className="text-2xl">🏟️</span>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                Ground Rules
+              </h3>
+              <p className="text-gray-600 text-sm leading-relaxed">
+                Each ground has specific rules. Always check with the ground staff about any special requirements or restrictions before playing.
+              </p>
+            </div>
+            
+            <div className="bg-white rounded-xl p-6 shadow-lg hover:shadow-xl transition-all duration-300">
+              <div className="w-12 h-12 bg-cricket-green/10 rounded-full flex items-center justify-center mb-4">
+                <span className="text-2xl">👔</span>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                Cricket Etiquette
+              </h3>
+              <p className="text-gray-600 text-sm leading-relaxed">
+                Wear appropriate clothing and footwear. Be respectful to other players and follow ground rules. No jewelry or loose items on field.
+              </p>
+            </div>
+          </div>
+
+          {/* Cricket Tips */}
+          <div className="mt-12 bg-white rounded-2xl shadow-lg p-8">
+            <h3 className="text-2xl font-bold text-gray-900 mb-6 text-center">
+              Cricket Tips for Beginners
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-cricket-green/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-3xl">🎯</span>
+                </div>
+                <h4 className="font-semibold text-gray-900 mb-2">Focus on Technique</h4>
+                <p className="text-gray-600 text-sm">
+                  Start with proper batting and bowling techniques. Practice regularly to improve your skills.
+                </p>
+              </div>
+              <div className="text-center">
+                <div className="w-16 h-16 bg-cricket-green/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-3xl">🤝</span>
+                </div>
+                <h4 className="font-semibold text-gray-900 mb-2">Team Spirit</h4>
+                <p className="text-gray-600 text-sm">
+                  Cricket is a team sport. Support your teammates and maintain good sportsmanship.
+                </p>
+              </div>
+              <div className="text-center">
+                <div className="w-16 h-16 bg-cricket-green/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-3xl">🏃</span>
+                </div>
+                <h4 className="font-semibold text-gray-900 mb-2">Stay Active</h4>
+                <p className="text-gray-600 text-sm">
+                  Cricket requires fitness. Stay active and warm up properly before playing.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Location Prompt */}
+      {!selectedCity && (
+        <section className="py-8 px-4 bg-white/50">
+          <div className="max-w-4xl mx-auto text-center">
+            <div className="inline-flex items-center space-x-2 bg-cricket-green/5 border border-cricket-green/20 rounded-full px-6 py-3">
+              <MapPin className="w-5 h-5 text-cricket-green animate-pulse" />
+              <span className="text-cricket-green font-medium">
+                Select your city to discover nearby cricket grounds
+              </span>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Newsletter Signup */}
+      <section className="py-16 bg-gradient-to-r from-cricket-green to-green-600">
+        <div className="container mx-auto px-4">
+          <div className="max-w-2xl mx-auto text-center">
+            <h2 className="text-3xl font-bold text-white mb-4">
+              Stay Updated
+            </h2>
+            <p className="text-green-100 mb-8">
+              Get notified about new grounds, special offers, and cricket events in your area
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 max-w-md mx-auto">
+              <input
+                type="email"
+                placeholder="Enter your email"
+                className="flex-1 px-4 py-3 rounded-lg border-0 focus:ring-2 focus:ring-white/20 focus:outline-none"
+              />
+              <Button className="bg-white text-cricket-green hover:bg-gray-100">
+                Subscribe
+              </Button>
+            </div>
+            <p className="text-green-100 text-sm mt-4">
+              We respect your privacy. Unsubscribe at any time.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Mobile App Download Section */}
+      <section className="py-16 bg-gradient-to-br from-gray-50 to-white">
+        <div className="container mx-auto px-4">
+          <div className="max-w-6xl mx-auto">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+              {/* Content */}
+              <div className="text-center lg:text-left">
+                <h2 className="text-3xl font-bold text-gray-900 mb-4">
+                  Get the BoxCric App
+                </h2>
+                <p className="text-gray-600 mb-6 text-lg">
+                  Download our mobile app for the best booking experience. Get instant notifications, 
+                  manage your bookings, and discover new grounds on the go.
+                </p>
+                
+                {/* Features */}
+                <div className="space-y-4 mb-8">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-cricket-green/10 rounded-full flex items-center justify-center">
+                      <svg className="w-4 h-4 text-cricket-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <span className="text-gray-700">Instant booking & notifications</span>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-cricket-green/10 rounded-full flex items-center justify-center">
+                      <svg className="w-4 h-4 text-cricket-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <span className="text-gray-700">Offline ground information</span>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-cricket-green/10 rounded-full flex items-center justify-center">
+                      <svg className="w-4 h-4 text-cricket-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    </div>
+                    <span className="text-gray-700">GPS navigation to grounds</span>
+                  </div>
+                </div>
+
+                {/* App Store Badges */}
+                <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
+                  <a href="#" className="inline-block">
+                    <div className="bg-black text-white px-6 py-3 rounded-lg flex items-center space-x-3 hover:bg-gray-800 transition-colors">
+                      <svg className="w-8 h-8" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+                      </svg>
+                      <div className="text-left">
+                        <div className="text-xs">Download on the</div>
+                        <div className="text-sm font-semibold">App Store</div>
+                      </div>
+                    </div>
+                  </a>
+                  <a href="#" className="inline-block">
+                    <div className="bg-black text-white px-6 py-3 rounded-lg flex items-center space-x-3 hover:bg-gray-800 transition-colors">
+                      <svg className="w-8 h-8" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M3,20.5V3.5C3,2.91 3.34,2.39 3.84,2.15L13.69,12L3.84,21.85C3.34,21.61 3,21.09 3,20.5M16.81,15.12L6.05,21.34L14.54,12.85L16.81,15.12M20.16,10.81C20.5,11.08 20.75,11.5 20.75,12C20.75,12.5 20.53,12.9 20.18,13.18L17.89,14.5L15.39,12L17.89,9.5L20.16,10.81M6.05,2.66L16.81,8.88L14.54,11.15L6.05,2.66Z"/>
+                      </svg>
+                      <div className="text-left">
+                        <div className="text-xs">GET IT ON</div>
+                        <div className="text-sm font-semibold">Google Play</div>
+                      </div>
+                    </div>
+                  </a>
+                </div>
+              </div>
+
+              {/* App Mockup */}
+              <div className="relative">
+                <div className="relative mx-auto lg:mx-0 w-80 h-96 bg-gradient-to-br from-cricket-green to-green-600 rounded-3xl shadow-2xl p-8">
+                  <div className="bg-white rounded-2xl h-full p-6">
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-8 h-8 bg-cricket-green rounded-lg flex items-center justify-center">
+                          <span className="text-white font-bold text-sm">BC</span>
+                        </div>
+                        <span className="font-semibold text-gray-900">BoxCric</span>
+                      </div>
+                      <div className="w-6 h-6 bg-gray-200 rounded-full"></div>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="font-semibold text-gray-900">Marine Drive Arena</h3>
+                          <div className="flex items-center space-x-1">
+                            <Star className="w-4 h-4 text-yellow-400 fill-current" />
+                            <span className="text-sm text-gray-600">4.8</span>
+                          </div>
+                        </div>
+                        <p className="text-sm text-gray-600 mb-2">Premium cricket ground with floodlights</p>
+                        <div className="flex items-center justify-between">
+                          <span className="text-cricket-green font-semibold">₹1,200/hr</span>
+                          <Button size="sm" className="bg-cricket-green text-white">
+                            Book Now
+                          </Button>
+                        </div>
+                      </div>
+                      
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="font-semibold text-gray-900">Andheri Sports Complex</h3>
+                          <div className="flex items-center space-x-1">
+                            <Star className="w-4 h-4 text-yellow-400 fill-current" />
+                            <span className="text-sm text-gray-600">4.6</span>
+                          </div>
+                        </div>
+                        <p className="text-sm text-gray-600 mb-2">Professional pitch with parking</p>
+                        <div className="flex items-center justify-between">
+                          <span className="text-cricket-green font-semibold">₹800/hr</span>
+                          <Button size="sm" className="bg-cricket-green text-white">
+                            Book Now
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -510,8 +1060,20 @@ const Index = () => {
         ground={selectedGround}
         onBookingCreated={handleBookingCreated}
       />
+
+      {/* Scroll to Top Button */}
+      <button
+        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        className="fixed bottom-6 right-6 bg-cricket-green hover:bg-cricket-green/90 text-white p-3 rounded-full shadow-lg transition-all duration-300 hover:scale-110 z-40"
+        aria-label="Scroll to top"
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+        </svg>
+      </button>
     </div>
   );
 };
 
 export default Index;
+
