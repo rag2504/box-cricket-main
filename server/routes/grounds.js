@@ -659,4 +659,26 @@ router.get("/search/autocomplete", async (req, res) => {
   }
 });
 
+// Get all grounds for the logged-in owner, including bookings
+router.get("/owner", authMiddleware, async (req, res) => {
+  try {
+    const ownerId = req.userId;
+    // Find all grounds where owner.userId matches
+    const grounds = await Ground.find({ "owner.userId": ownerId });
+    // For each ground, fetch bookings
+    const result = await Promise.all(grounds.map(async (ground) => {
+      const bookings = await Booking.find({ groundId: ground._id })
+        .populate("userId", "name email phone");
+      return {
+        ground,
+        bookings,
+      };
+    }));
+    res.json({ success: true, grounds: result });
+  } catch (error) {
+    console.error("Owner grounds fetch error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch owner's grounds" });
+  }
+});
+
 export default router;

@@ -72,16 +72,32 @@ app.post('/api/admin/grounds', adminAuth, async (req, res) => {
       address: req.body.location.address,
       pincode: req.body.location.pincode
     };
-    
+
+    // --- OWNER LOGIC START ---
+    let ownerUser = await User.findOne({ email: req.body.owner.email });
+    if (!ownerUser) {
+      // Create new ground_owner user
+      ownerUser = await User.create({
+        name: req.body.owner.name,
+        email: req.body.owner.email,
+        phone: req.body.owner.contact,
+        password: req.body.owner.password || (Math.random().toString(36).slice(-8)), // fallback random password
+        role: 'ground_owner',
+        isVerified: true
+      });
+    }
+    // Remove password from owner object for ground
+    const { password, ...ownerWithoutPassword } = req.body.owner;
+    // --- OWNER LOGIC END ---
+
     // Set default values for required fields
     const groundData = {
       ...req.body,
       status: "active", // Set to active for admin-created grounds
       isVerified: true, // Set to verified for admin-created grounds
-      // Provide a default userId for owner if not provided
       owner: {
-        ...req.body.owner,
-        userId: req.body.owner?.userId || new mongoose.Types.ObjectId(),
+        ...ownerWithoutPassword,
+        userId: ownerUser._id,
       },
       availability: req.body.availability || {
         timeSlots: ["06:00-07:00", "07:00-08:00", "08:00-09:00", "09:00-10:00", "10:00-11:00", "11:00-12:00", "12:00-13:00", "13:00-14:00", "14:00-15:00", "15:00-16:00", "16:00-17:00", "17:00-18:00", "18:00-19:00", "19:00-20:00", "20:00-21:00", "21:00-22:00"],

@@ -228,6 +228,7 @@ groundForm.addEventListener('submit', async (e) => {
             name: document.getElementById('ownerName').value,
             email: document.getElementById('ownerEmail').value,
             contact: document.getElementById('ownerContact').value,
+            password: document.getElementById('ownerPassword').value,
             verified: true
         },
         rating: {
@@ -471,47 +472,18 @@ async function loadLocations() {
             return;
         }
         
-        const tbody = document.getElementById('locationsTableBody');
-        tbody.innerHTML = '';
+        const dropdown = document.getElementById('groundCity');
+        dropdown.innerHTML = '<option value="">Select City</option>';
         
         locations.forEach(location => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${location.id}</td>
-                <td>${location.name}</td>
-                <td>${location.state}</td>
-                <td>${location.popular ? 'Yes' : 'No'}</td>
-                <td>
-                    <button onclick="editLocation('${location.id}')" class="btn-small">Edit</button>
-                    <button onclick="deleteLocation('${location.id}')" class="btn-small btn-danger">Delete</button>
-                </td>
-            `;
-            tbody.appendChild(row);
+            const option = document.createElement('option');
+            option.value = location.id;
+            option.textContent = `${location.name}, ${location.state}`;
+            dropdown.appendChild(option);
         });
     } catch (error) {
-        console.error('Error loading locations:', error);
-        alert('Error loading locations: ' + error.message);
-    }
-}
-
-async function deleteLocation(id) {
-    if (!confirm('Are you sure you want to delete this location?')) return;
-    
-    try {
-        const response = await fetch(`/api/admin/locations/${id}`, {
-            method: 'DELETE',
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (response.ok) {
-            alert('Location deleted successfully!');
-    loadLocations();
-            populateCityDropdown();
-  } else {
-            alert('Error deleting location');
-        }
-    } catch (error) {
-        alert('Error: ' + error.message);
+        console.error('Error loading cities:', error);
+        alert('Error loading cities: ' + error.message);
     }
 }
 

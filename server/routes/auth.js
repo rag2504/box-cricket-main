@@ -467,6 +467,61 @@ router.post("/verify-login-otp", async (req, res) => {
   }
 });
 
+// Owner login (email + password, only for ground_owner)
+router.post("/owner/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and password are required",
+      });
+    }
+    // Find user by email and role
+    const user = await User.findOne({ email, role: "ground_owner" });
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid credentials",
+      });
+    }
+    // Check password
+    const isPasswordValid = await user.comparePassword(password);
+    if (!isPasswordValid) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid credentials",
+      });
+    }
+    // Update last login
+    user.lastLogin = new Date();
+    await user.save();
+    // Generate token
+    const token = generateToken(user._id);
+    res.json({
+      success: true,
+      message: "Login successful!",
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        isVerified: user.isVerified,
+        location: user.location,
+        preferences: user.preferences,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    console.error("Owner login error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Login failed. Please try again.",
+    });
+  }
+});
+
 // Get current user
 router.get("/me", authMiddleware, async (req, res) => {
   try {
